@@ -8,6 +8,7 @@
 // Evidence re-query all tell the same story.
 
 import { REVENUES, TICKETS, aggregate, applyFilters } from './data.mjs'
+import { agentEvent, workspaceOps, toDeltas } from './events.mjs'
 
 // --- chart payload (faithful JS port of evidence/chart_payload.py) -------------
 
@@ -146,12 +147,6 @@ function buildRevenueAnswer(agg) {
   ].join('\n')
 }
 
-// Split an answer into small deltas so the frontend streams like the real Mesh.
-function toDeltas(text, chunk = 24) {
-  const out = []
-  for (let i = 0; i < text.length; i += chunk) out.push(text.slice(i, i + chunk))
-  return out
-}
 
 // The timed event feed: [{at(ms), ev}]. Terminal events are appended by the API
 // layer (final_answer / run_done), so a stop can cut the tail cleanly.
@@ -507,9 +502,9 @@ export function buildWorkspaceScenario(exchangeId) {
 
   const events = []
   const push = (at, ev) => events.push({ at, ev })
-  let seq = 0
-  const ws = (at, op, payload) => push(at, { type: 'workspace', v: 1, op, seq: ++seq, ts: Math.round(at / 100) / 10, ...payload })
-  const step = (at, label, extra) => push(at, { type: 'agent_event', blockId: null, nextBlockId: null, toolName: null, elapsedSeconds: at / 1000, label, ...extra })
+  const wsOp = workspaceOps()
+  const ws = (at, op, payload) => push(at, wsOp(Math.round(at / 100) / 10, op, payload))
+  const step = (at, label, extra) => push(at, agentEvent(at / 1000, label, extra))
 
   push(0, { type: 'run_started', exchangeId })
   step(200, 'Analyse de la demande', { eventKind: 'START' })
@@ -618,6 +613,110 @@ export function buildWorkspaceScenario(exchangeId) {
     artifacts: [],
     // The Data tab (Evidence) keeps the V1.3 revenue descriptor for this exchange.
     evidence: { ...revenue.evidence, sql: WS_REVENUE_SQL },
+  }
+}
+
+// --- Studio continuity: the CONTINUE run ------------------------------------------
+// The user refines the Studio on screen ("garde ce graphique et ajoute en dessous...").
+// Played as the worker RELAYS it: the orchestrator's studio.continue is already
+// expanded into the studio.carry of the validated base (same seq 1, built by the
+// caller from the stored base document), then this run adds ONE section text and ONE
+// wide line chart bound to ITS OWN s1q1 (the same id as the base's s1q1, on purpose:
+// the carried widgets resolve against their origin exchange, never this one).
+
+const CONTINUE_SQL = `SELECT "Month",
+       SUM(CASE WHEN "Phase" = 'ACTUALS' THEN "Revenues" ELSE 0 END) AS actual_revenue,
+       SUM(CASE WHEN "Phase" = 'BUDGET' THEN "Revenues" ELSE 0 END) AS budget_revenue
+FROM "OWISMIND_LOCAL_drive_revenues"
+WHERE "Year" = 2026 AND "Phase" IN ('ACTUALS', 'BUDGET')
+GROUP BY "Month"
+ORDER BY "Month"`
+
+const CONTINUE_RE = /(garde|rajoute|ajoute|en dessous|en bas|à côté|a cote|remplace|enl[eè]ve|ce graphique|keep|add|below|next to|replace|remove)/i
+
+/** True when the message refines what is on screen (the scripted CONTINUE rule). */
+export function wantsContinue(message) {
+  return CONTINUE_RE.test(String(message || ''))
+}
+
+function monthlyActualVsBudget() {
+  const rows2026 = applyFilters(REVENUES, [
+    { column: 'Year', op: '=', values: ['2026'] },
+    { column: 'Phase', op: 'IN', values: ['ACTUALS', 'BUDGET'] },
+  ])
+  const byMonth = new Map()
+  for (const row of rows2026) {
+    if (!byMonth.has(row.Month)) byMonth.set(row.Month, { actual: 0, budget: 0 })
+    const slot = byMonth.get(row.Month)
+    if (row.Phase === 'ACTUALS') slot.actual += row.Revenues
+    else slot.budget += row.Revenues
+  }
+  return [...byMonth.entries()].sort((a, b) => a[0] - b[0])
+    .map(([m, v]) => [m, Math.round(v.actual * 100) / 100, Math.round(v.budget * 100) / 100])
+}
+
+/**
+ * @param {string} exchangeId
+ * @param {(seq:number, ts:number) => object|null} makeCarry  the expanded studio.carry
+ */
+export function buildContinueScenario(exchangeId, makeCarry) {
+  const rows = monthlyActualVsBudget()
+  const result = { columns: ['Month', 'actual_revenue', 'budget_revenue'], rows, truncated: false }
+  const best = rows.reduce((a, r) => (r[1] - r[2] > a[1] - a[2] ? r : a), rows[0])
+  const events = []
+  const push = (at, ev) => events.push({ at, ev })
+  const wsOp = workspaceOps()
+  const ws = (at, op, payload) => push(at, wsOp(Math.round(at / 100) / 10, op, payload))
+  const step = (at, label, extra) => push(at, agentEvent(at / 1000, label, extra))
+
+  push(0, { type: 'run_started', exchangeId })
+  step(200, 'Analyse de la demande', { eventKind: 'START' })
+  push(400, { type: 'narration', text: 'Je garde le Studio affiché et j’ajoute la vue mensuelle en dessous.' })
+  // seq 1: the orchestrator's studio.continue, relayed as the carry of the base.
+  const carry = wsOp(0.6, 'studio.continue', {})
+  const expanded = makeCarry(carry.seq, carry.ts)
+  push(600, expanded || carry)
+  // New ids start past the highest carried w<n> (the orchestrator's _next_widget).
+  const top = Math.max(0, ...((expanded && expanded.widgets) || []).map((w) => Number((/^w(\d+)$/.exec(w.id) || [])[1]) || 0))
+  const textId = 'w' + (top + 1)
+  const chartId = 'w' + (top + 2)
+  step(900, "Consultation de l'expert revenus", { eventKind: 'CALLING_AGENT', agentKey: 'revenue', stepIndex: 1, stepCount: 1 })
+  step(1300, 'Génération du SQL par le modèle sémantique', { eventKind: 'RUNNING_TOOL', toolName: 'semantic-model-query' })
+  push(2100, { type: 'generated_sql', sqlIndex: 1, success: true, rowCount: rows.length, sql: CONTINUE_SQL, sqlId: 's1q1', stepIndex: 1, agentKey: 'revenue', result })
+  step(2200, 'Expert revenus : résultat obtenu', { eventKind: 'AGENT_DONE', agentKey: 'revenue', status: 'ok' })
+  ws(2250, 'prov.set', { sql_id: 's1q1', agent_key: 'revenue', tool: 'semantic-model-query', task: 'Réalisé et budget 2026 par mois (janvier à août).', duration_ms: 1150, row_count: rows.length, success: true })
+  ws(2500, 'widget.add', { id: textId, kind: 'text', title: 'Réalisé et budget mois par mois', sql_id: 's1q1', text: `- Le réalisé suit le budget de janvier à août 2026.\n- Le meilleur mois face au budget est le mois **${best[0]}**.` })
+  ws(2700, 'widget.add', { id: chartId, kind: 'chart', size: 'wide', title: 'Réalisé et budget mensuels 2026', comment: 'Revenus ACTUALS et BUDGET par mois, janvier à août 2026.', sql_id: 's1q1', chart: { type: 'line', x: 'Month', y: ['actual_revenue', 'budget_revenue'], x_label: 'Mois', y_label: 'Revenus', unit: '€' } })
+  step(2900, 'Rédaction de la réponse', { eventKind: 'WRITING_ANSWER' })
+  const answer = "J'ai complété le Studio (ajout du réalisé et du budget mois par mois, sous le graphique existant). Le détail est dans le Studio."
+  let t = 3000
+  for (const delta of toDeltas(answer)) {
+    push(t, { type: 'answer_delta', text: delta })
+    t += 40
+  }
+  push(t + 100, { type: 'usage_summary', promptTokens: 6120, completionTokens: 610, totalTokens: 6730, estimatedCost: 0.0141 })
+  const block = { captured: true, columns: result.columns, rows, row_count: rows.length, truncated: false }
+  const chips = [
+    { id: 1, column: 'Year', op: '=', values: ['2026'], editable: true },
+    { id: 2, column: 'Phase', op: 'IN', values: ['ACTUALS', 'BUDGET'], editable: true },
+  ]
+  const filters = [{ kind: 'filter_eq', params: ['Year', '2026'] }, { kind: 'filter_in', params: ['Phase', 2, 'ACTUALS, BUDGET'] }]
+  const sqlItems = [{
+    sql: CONTINUE_SQL, success: true, row_count: rows.length, sql_id: 's1q1', step_index: 1, agent_key: 'revenue', result,
+    evidence: { base: 'revenues', dataset: 'DRIVE_Revenues', chips, advanced: { present: false, display: '' }, sql: CONTINUE_SQL,
+      explanationSteps: [{ kind: 'source', params: ['DRIVE_Revenues'] }, ...filters, { kind: 'group', params: ['Month'] }, { kind: 'agg_sum', params: ['Revenues'] }],
+      drillColumns: ['Month'], resultBlock: block },
+  }]
+  const revenue = buildRevenueScenario(exchangeId)
+  return {
+    events,
+    lastAt: t + 100,
+    answer,
+    usage: { input_tokens: 6120, output_tokens: 610, total_tokens: 6730, estimated_cost: 0.0141 },
+    sqlItems,
+    filtersBySql: { s1q1: filters },
+    artifacts: [],
+    evidence: { ...revenue.evidence, sql: CONTINUE_SQL },
   }
 }
 

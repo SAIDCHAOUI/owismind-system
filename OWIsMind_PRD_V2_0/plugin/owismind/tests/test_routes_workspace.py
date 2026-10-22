@@ -6,7 +6,12 @@
     with the captured SQL by sql_id (sql, filters, result, Chart.js / KPI payloads),
     an orphan widget gets an honest ``{ok: false, reason: orphan}``, a duplicated
     sql_id is never resolved, nothing is re-run;
-  - /conversation: each row carries ``has_workspace`` from ONE owner-scoped lookup.
+  - /conversation: each row carries ``has_workspace`` (plan or widgets: a Studio) and
+    its stored ``suggestions`` from ONE owner-scoped lookup;
+  - Studio continuity: carried widgets (``origin``) resolve against their ORIGIN
+    exchange (``origins`` block, owner-scoped reads only when such widgets exist),
+    never against this exchange's same-named sql_id; a missing / foreign origin is
+    ``orphan``; /evidence/meta query widgets skip carried widgets.
 The flask + dataiku stubs of tests/_dss_stub.py make routes importable.
 """
 import json
@@ -66,9 +71,13 @@ class _RouteBase(unittest.TestCase):
         from owismind.evidence import throttle
         from owismind.security import impersonation
         from owismind.storage import sql_config
-        self.calls = {"read": [], "items": [], "ids": []}
+        self.calls = {"read": [], "items": [], "ids": [], "origin_items": [],
+                      "origin_ws": []}
         self.state = None
         self.items = []
+        self.origin_items = {}
+        self.origin_prov = {}
+        self.flags = {"e2": {"studio": True, "suggestions": []}}
         self._mods = (throttle, impersonation, sql_config)
         self._orig = {
             "request": routes.request,
@@ -101,9 +110,19 @@ class _RouteBase(unittest.TestCase):
                 return test.items
 
             @staticmethod
-            def workspace_exchange_ids(user_id, ids):
+            def read_exchanges_sql_items(user_id, ids):
+                test.calls["origin_items"].append((user_id, list(ids)))
+                return {k: v for k, v in test.origin_items.items() if k in ids}
+
+            @staticmethod
+            def read_workspaces(user_id, ids):
+                test.calls["origin_ws"].append((user_id, list(ids)))
+                return {k: v for k, v in test.origin_prov.items() if k in ids}
+
+            @staticmethod
+            def workspace_flags(user_id, ids):
                 test.calls["ids"].append((user_id, list(ids)))
-                return {"e2"}
+                return {k: v for k, v in test.flags.items() if k in ids}
 
         routes.workspaces_storage = _Storage
 
@@ -176,7 +195,90 @@ class WorkspaceRouteTests(_RouteBase):
         self.assertEqual(sorted(body["resolved"]), ["s1q1"])
 
 
+_CHART = {"type": "bar", "x": "region", "y": ["revenue"]}
+
+
+def _carried_state():
+    """A continued Studio: two carried widgets (one origin read, one missing) on
+    top of this run's own chart, all three bound to the SAME sql_id s1q1."""
+    return {
+        "v": 1, "status": "done", "exchange_id": "ex-new", "base_exchange_id": "ex-base",
+        "plan": None, "notes": [], "provenance": {"s1q1": {
+            "agent_key": "revenue", "tool": "semantic-model-query", "success": True}},
+        "widgets": [
+            {"id": "w1", "kind": "chart", "title": "Base", "sql_id": "s1q1",
+             "chart": _CHART, "binding": "explicit", "origin": "ex-base"},
+            {"id": "w2", "kind": "kpi", "title": "Gone", "sql_id": "s1q1",
+             "kpi": {"label": "CA", "value": "revenue"}, "binding": "explicit",
+             "origin": "ex-gone"},
+            {"id": "w3", "kind": "chart", "title": "New", "sql_id": "s1q1",
+             "chart": _CHART, "binding": "explicit"},
+        ],
+        "summary": {"widget_ids_by_step": {}, "sql_ids": ["s1q1"]},
+    }
+
+
+def _item(rows):
+    return {"sql": "SELECT region, revenue FROM t", "success": True, "sql_id": "s1q1",
+            "row_count": len(rows),
+            "result": {"columns": ["region", "revenue"], "rows": rows, "truncated": False}}
+
+
+class CarriedWidgetRouteTests(_RouteBase):
+    def test_carried_widgets_resolve_against_their_origin(self):
+        self.state = _carried_state()
+        self.items = [_item([["Nord", 10]])]
+        self.origin_items = {"ex-base": [_item([["Est", 7], ["Ouest", 3]])]}
+        self.origin_prov = {"ex-base": {
+            "s1q1": {"agent_key": "revenue", "tool": "semantic-model-query",
+                     "success": True, "task": "CA 2025"},
+            "s9q9": {"agent_key": "x", "tool": "semantic-model-query", "success": True}}}
+        body = self._get({"exchange_id": "ex-new"})
+        data = body["widgets_data"]
+        self.assertEqual(data["w3"]["labels"], ["Nord"])           # this exchange
+        self.assertEqual(data["w1"]["labels"], ["Est", "Ouest"])   # its origin
+        self.assertEqual(data["w2"], {"ok": False, "reason": "orphan"})
+        self.assertEqual(body["resolved"]["s1q1"]["result"]["rows"], [["Nord", 10]])
+        self.assertEqual(sorted(body["origins"]), ["ex-base"])
+        origin = body["origins"]["ex-base"]
+        self.assertEqual(origin["resolved"]["s1q1"]["result"]["rows"][0], ["Est", 7])
+        self.assertEqual(sorted(origin["provenance"]), ["s1q1"])
+        # Owner-scoped origin reads, with the caller's user id, bounded ids.
+        self.assertEqual(self.calls["origin_items"], [("u.one", ["ex-base", "ex-gone"])])
+        self.assertEqual(self.calls["origin_ws"], [("u.one", ["ex-base", "ex-gone"])])
+
+    def test_no_carried_widget_no_origin_read(self):
+        fx = _load("workspace_run_multi_facet.json")
+        self.state = _load(fx["expected_reduced"])["final"]
+        self.items = _captured_items(fx)
+        body = self._get({"exchange_id": fx["exchange_id"]})
+        self.assertEqual(body["origins"], {})
+        self.assertEqual(self.calls["origin_items"], [])
+        self.assertEqual(self.calls["origin_ws"], [])
+
+    def test_query_widgets_skip_carried(self):
+        self.state = _carried_state()
+        meta = {"queries": [{"sql_id": "s1q1"}]}
+        routes._attach_query_widgets(meta, "u.one", "ex-new", [])
+        self.assertEqual([w["id"] for w in meta["queries"][0]["widgets"]], ["w3"])
+
+
 class ResolveRulesTests(unittest.TestCase):
+    def test_carried_widget_without_origin_data_is_orphan(self):
+        resolved, data = resolve.build_resolution(_carried_state(), [_item([["N", 1]])])
+        self.assertEqual(data["w1"], {"ok": False, "reason": "orphan"})
+        self.assertEqual(data["w2"], {"ok": False, "reason": "orphan"})
+        self.assertNotEqual(data["w3"].get("reason"), "orphan")   # own SQL, no block fn
+        self.assertEqual(sorted(resolved), ["s1q1"])
+
+    def test_origin_ids_bounded_and_unique(self):
+        state = {"widgets": [{"id": "w%d" % i, "origin": "ex-%d" % (i % 20)}
+                             for i in range(40)] + [{"id": "x"}, "junk"]}
+        ids = resolve.origin_exchange_ids(state)
+        self.assertEqual(len(ids), 12)
+        self.assertEqual(len(set(ids)), 12)
+        self.assertEqual(resolve.resolve_workspace(None, None), ({}, {}, {}))
+
     def test_duplicated_sql_id_is_never_resolved(self):
         state = _load("reduced/workspace_run_stopped.json")["final"]
         items = [{"sql": "SELECT 1", "sql_id": "s1q1"}, {"sql": "SELECT 2", "sql_id": "s1q1"}]
@@ -197,6 +299,19 @@ class ConversationHasWorkspaceTests(_RouteBase):
         body = routes.conversation()
         self.assertEqual([r["has_workspace"] for r in body["rows"]], [False, True])
         self.assertEqual(self.calls["ids"], [("u.one", ["e1", "e2"])])
+        self.assertNotIn("suggestions", body["rows"][1])
+
+    def test_suggestions_only_doc_is_no_studio_but_replays_its_chips(self):
+        self.flags = {"e1": {"studio": False, "suggestions": ["Voir la suite par pays"]},
+                      "e2": {"studio": True, "suggestions": ["Comparer au budget 2026"]}}
+        routes.chat_v5.messages_for_session = lambda uid, sid: [
+            {"exchange_id": "e1"}, {"exchange_id": "e2"}, {"exchange_id": "e3"}]
+        routes.request = _Req({"session_id": "sess-1"})
+        rows = routes.conversation()["rows"]
+        self.assertEqual([r["has_workspace"] for r in rows], [False, True, False])
+        self.assertEqual([r.get("suggestions") for r in rows],
+                         [["Voir la suite par pays"], ["Comparer au budget 2026"], None])
+        self.assertEqual(len(self.calls["ids"]), 1)                # one lookup, not N
 
 
 if __name__ == "__main__":

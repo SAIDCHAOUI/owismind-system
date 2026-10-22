@@ -19,10 +19,14 @@
     "widget_comment_chars": 280,
     "widget_text_chars": 4000,
     "task_chars": 800,
-    "max_y_series": 8
+    "max_y_series": 8,
+    "max_carry_remove": 12,
+    "suggestions_max_items": 3,
+    "suggestion_min_chars": 8,
+    "suggestion_max_chars": 120
   },
   "enums": {
-    "ops": ["plan.set", "plan.step", "note.add", "widget.add", "prov.set"],
+    "ops": ["plan.set", "plan.step", "note.add", "widget.add", "prov.set", "studio.continue", "widget.remove", "studio.carry", "suggest.set"],
     "plan_origins": ["model", "auto"],
     "step_statuses": ["todo", "running", "done", "error"],
     "note_kinds": ["plan", "find", "check", "note", "done"],
@@ -31,21 +35,25 @@
     "chart_styles": ["grouped", "stacked", "horizontal", "area", "smooth", "stepped", "donut"],
     "bindings": ["explicit", "orphan"],
     "run_statuses": ["running", "done", "stopped", "error"],
-    "tools": ["semantic-model-query", "attribute_lookup", "correlate"]
+    "tools": ["semantic-model-query", "attribute_lookup", "correlate"],
+    "widget_sizes": ["normal", "wide"],
+    "text_roles": ["section", "scope"]
   },
   "patterns": {
     "sql_id": "^s[0-9]+(q|lk|qc)[0-9]+$",
-    "slug": "^[a-z0-9_-]{1,32}$"
+    "slug": "^[a-z0-9_-]{1,32}$",
+    "exchange_id": "^[A-Za-z0-9_-]{1,128}$"
   },
   "$defs": {
     "slug": {"type": "string", "pattern": "^[a-z0-9_-]{1,32}$"},
     "sqlId": {"type": "string", "pattern": "^s[0-9]+(q|lk|qc)[0-9]+$"},
+    "exchangeId": {"type": "string", "pattern": "^[A-Za-z0-9_-]{1,128}$"},
     "envelope": {
       "type": "object",
       "required": ["v", "op", "seq"],
       "properties": {
         "v": {"const": 1},
-        "op": {"enum": ["plan.set", "plan.step", "note.add", "widget.add", "prov.set"]},
+        "op": {"enum": ["plan.set", "plan.step", "note.add", "widget.add", "prov.set", "studio.continue", "widget.remove", "studio.carry", "suggest.set"]},
         "seq": {"type": "integer", "minimum": 1},
         "ts": {"type": "number", "minimum": 0, "description": "Seconds since run start; stamped by the backend when absent."}
       }
@@ -127,10 +135,13 @@
         "title": {"type": "string", "maxLength": 200},
         "comment": {"type": "string", "maxLength": 280},
         "sql_id": {"$ref": "#/$defs/sqlId", "description": "REQUIRED when kind is chart, table or kpi. Never a fallback to the latest result."},
+        "size": {"enum": ["normal", "wide"], "description": "Optional width hint, kept on chart and table only (dropped on kpi and text)."},
+        "role": {"enum": ["section", "scope"], "description": "Optional, text only: 'scope' is the analysis scope shown in the Studio header, not on the board. Default 'section'."},
         "chart": {"$ref": "#/$defs/chartSpec"},
         "kpi": {"$ref": "#/$defs/kpiSpec"},
         "text": {"type": "string", "maxLength": 4000, "description": "REQUIRED when kind is text. Markdown, rendered through the sanitized markdown pipeline."},
-        "binding": {"enum": ["explicit", "orphan"], "description": "Set by the backend at persistence: orphan when sql_id matches no captured SQL of the run."}
+        "binding": {"enum": ["explicit", "orphan"], "description": "Set by the backend at persistence: orphan when sql_id matches no captured SQL of the run."},
+        "replaces": {"$ref": "#/$defs/slug", "description": "Optional: id of a widget already in the state; the new widget takes its board position and the old one is removed. Op attribute only, never stored. widget.add never accepts 'origin'."}
       }
     },
     "prov.set": {
@@ -146,6 +157,37 @@
         "row_count": {"type": "integer", "minimum": 0},
         "success": {"type": "boolean"}
       }
+    },
+    "studio.continue": {
+      "allOf": [{"$ref": "#/$defs/envelope"}],
+      "description": "The orchestrator decided to CONTINUE the Studio the user sees (base resolved and validated server side, never sent by the agent). With a valid base the backend relays a studio.carry with the SAME seq in its place; without one it is a no-op.",
+      "properties": {
+        "remove": {"type": "array", "maxItems": 12, "items": {"$ref": "#/$defs/slug"}, "description": "Ids of base widgets NOT carried (unknown ids ignored)."}
+      }
+    },
+    "widget.remove": {
+      "allOf": [{"$ref": "#/$defs/envelope"}],
+      "required": ["id"],
+      "properties": {
+        "id": {"$ref": "#/$defs/slug"}
+      }
+    },
+    "studio.carry": {
+      "allOf": [{"$ref": "#/$defs/envelope"}],
+      "description": "Backend-generated only (rejected on the agent stream). Prepends the base widgets (minus remove) before the widgets of this run, capped at max_widgets; applied once per run.",
+      "required": ["base_exchange_id", "widgets"],
+      "properties": {
+        "base_exchange_id": {"$ref": "#/$defs/exchangeId"},
+        "widgets": {"type": "array", "maxItems": 12, "items": {"type": "object", "description": "A widget.add payload without step_id / ts, plus binding (data widgets) and origin (the exchange that owns its SQL).", "required": ["id", "kind", "title", "origin"], "properties": {"origin": {"$ref": "#/$defs/exchangeId"}}}}
+      }
+    },
+    "suggest.set": {
+      "allOf": [{"$ref": "#/$defs/envelope"}],
+      "description": "The 2 or 3 next analyses proposed under the answer ('Go further' chips), in the reply language; a click sends the text as the next user message. Emitted once, right before the final answer. Last op wins. Never carried by studio.carry, ignored by summary / finalize; a workspace holding only suggestions never opens the Studio.",
+      "required": ["items"],
+      "properties": {
+        "items": {"type": "array", "minItems": 1, "maxItems": 3, "items": {"type": "string", "minLength": 8, "maxLength": 120}, "description": "Each item is stripped then kept only when its length (Unicode code points, JS [...s].length) is within [8, 120]: an out-of-bounds or non-string item is DROPPED (never truncated). Duplicates removed case- and whitespace-insensitively (lowercase + whitespace runs collapsed), first occurrence kept as stripped; more than 3 valid -> the first 3. No valid item left (or items not an array) -> the op is dropped."}
+      }
     }
   },
   "reduced_state": {
@@ -156,6 +198,7 @@
       "v": {"const": 1},
       "status": {"enum": ["running", "done", "stopped", "error"]},
       "exchange_id": {"type": "string"},
+      "base_exchange_id": {"type": "string", "pattern": "^[A-Za-z0-9_-]{1,128}$", "description": "Set when this Studio continues another one (studio.carry)."},
       "plan": {
         "type": ["object", "null"],
         "properties": {
@@ -174,8 +217,9 @@
         }
       },
       "notes": {"type": "array", "items": {"type": "object"}},
-      "widgets": {"type": "array", "items": {"type": "object"}},
+      "widgets": {"type": "array", "items": {"type": "object", "description": "A carried widget has 'origin' (pattern exchange_id): its sql_id resolves against THAT exchange."}},
       "provenance": {"type": "object", "additionalProperties": {"type": "object"}},
+      "suggestions": {"type": "array", "minItems": 1, "maxItems": 3, "items": {"type": "string", "minLength": 8, "maxLength": 120}, "description": "Items of the last valid suggest.set. ABSENT when there is none (never an empty list): read it as state.suggestions || []."},
       "summary": {"type": "object"}
     }
   }

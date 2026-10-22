@@ -112,9 +112,11 @@ const RAIL_PX = 60
 watch(() => workspace.open, (open) => {
   if (open && !narrow.value) openAtStudioShare(ui.setEvidenceWidth)
 })
-// Bottom sheet (narrow screens): one tap outside closes the open right panel.
+// Bottom sheet (narrow screens): one tap outside closes the open right panel. When
+// that panel is the Studio it is an explicit user close: sticky for a live run (no
+// automatic Studio re-open); closing another panel leaves the run untouched.
 function closeRight() {
-  workspace.close()
+  workspace.close(workspace.open ? { byUser: true } : undefined)
   evidence.close()
   sources.closePanel()
 }
@@ -165,14 +167,27 @@ watch(() => sources.open, (open) => {
 watch(() => workspace.open, (open) => {
   if (open) {
     sources.closePanel()
-    if (evidence.open && evidence.exchangeId !== workspace.exchangeId) evidence.close()
-  } else if (evidence.open && evidence.exchangeId === workspace.exchangeId) {
+    if (evidence.open && !workspace.hostsEvidence(evidence.exchangeId)) evidence.close()
+  } else if (evidence.open && workspace.hostsEvidence(evidence.exchangeId)) {
     evidence.close()
   }
 })
+// The Studio's Data tab may host the Evidence of a carried widget's ORIGIN answer
+// (continued Studio): that one belongs to the Studio too (workspace.hostsEvidence).
 watch(() => [evidence.open, evidence.exchangeId], ([open, id]) => {
-  if (open && workspace.open && id !== workspace.exchangeId) workspace.close()
+  if (open && workspace.open && !workspace.hostsEvidence(id)) workspace.close()
 })
+// The Studio's auto-open never pre-empts a right panel the USER opened (Source Data
+// past its auto-dock teaser, a standalone Evidence panel) and never opens off the chat
+// route: the store defers it until the chat shows with no such panel. A deferred open
+// never crosses conversations: chat.openSession / newConversation drop it, and the
+// store also skips a deferred run of another conversation than `sessionId`.
+watch(() => chat.activeSessionId, () => workspace.clearDeferred())
+watch(
+  () => [(sources.open && !sources.teaser) || evStandalone.value, route.name === 'chat', chat.activeSessionId],
+  ([otherPanel, onChat, sessionId]) => workspace.setPanelContext({ otherPanel, onChat, sessionId }),
+  { immediate: true },
+)
 
 // A SPACE-HUNGRY right panel auto-collapses the conversation sidebar to give it
 // room: the Evidence panel (pixel width) and a Source Data dock holding a large

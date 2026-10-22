@@ -52,3 +52,6 @@ docs/agentic-research/
 # Dev harness (local visual validation) - Vite cache + Playwright screenshots
 dev-harness/.vite-cache/
 dev-harness/tools/out/
+
+# Local dev harness secrets (Anthropic API key for the live mock), never committed
+OWIsMind_PRD_V2_0/dev-harness/.env

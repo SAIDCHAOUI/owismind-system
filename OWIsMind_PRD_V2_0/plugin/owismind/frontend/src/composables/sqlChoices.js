@@ -19,7 +19,8 @@ function stepOf(wsState, stepId) {
 export function sqlChoices(meta, wsState, activeSqlId) {
   const queries = meta && Array.isArray(meta.queries) ? meta.queries : []
   const prov = (wsState && wsState.provenance) || {}
-  const wsWidgets = (wsState && wsState.widgets) || []
+  // A carried widget (origin) reads a query of ANOTHER exchange: never a label here.
+  const wsWidgets = ((wsState && wsState.widgets) || []).filter((w) => w && !w.origin)
   const seen = new Set()
   const out = []
   const add = (sqlId, q) => {

@@ -289,17 +289,17 @@ function clearEvSearch() {
 }
 /* Let the rows table fill the remaining panel height instead of a capped block:
    flex:1 on the table, an uncapped scroll container (keeps the ~220px floor). */
-/* The BROWSING tables fill the panel; the Analyze view's read-only preview
-   (`.is-preview`) keeps its own compact height instead. */
+/* Every rows table fills the panel: the Data view AND the Analyze workspace's data pane
+   (the same SourceTable since 2026-10-20). */
 .ev-src-tab :deep(.ev-table),
-.ev-src-tab :deep(.src-table:not(.is-preview)) { flex: 1; min-height: 0; }
+.ev-src-tab :deep(.src-table) { flex: 1; min-height: 0; }
 .ev-src-tab :deep(.ev-table-view),
-.ev-src-tab :deep(.src-table:not(.is-preview) .src-table-view) { flex: 1 1 auto; min-height: 0; }
+.ev-src-tab :deep(.src-table .src-table-view) { flex: 1 1 auto; min-height: 0; }
 .ev-src-tab :deep(.ev-table-scroll),
-.ev-src-tab :deep(.src-table:not(.is-preview) .src-table-scroll) { flex: 1 1 auto; max-height: none; }
+.ev-src-tab :deep(.src-table .src-table-scroll) { flex: 1 1 auto; max-height: none; }
 /* The embedded explorer fills the column too. */
 .ev-src-tab :deep(.src-explorer) { flex: 1; min-height: 0; }
-/* The shared Analyze workspace fills the column (its result + preview split the height). */
+/* The shared Analyze workspace fills the column (its result, then the data pane). */
 .ev-src-tab :deep(.src-ws) { flex: 1; min-height: 0; }
 
 /* ONE top row - the search takes every remaining pixel, the Data|Analyze switch rides

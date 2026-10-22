@@ -4,6 +4,13 @@
 // scroll, and LAZY / INFINITE loading: the store loads page 0, then appends the next
 // page when the bottom sentinel scrolls into view (never the whole table at once).
 // Mirrors the Evidence rows table mechanics on the sources store.
+//
+// ONE table, THREE surfaces (F28): the standalone explorer's Data view, the same view
+// embedded in the Evidence "Source data" tab, and the data pane of the Analyze workspace
+// (user ask 2026-10-20: the Analyze tab behaves EXACTLY like the Data tab - same rows
+// window, same lazy append, same sort, same cell actions, same height). The host store
+// (`surface`) owns all of it; the workspace only adds its column ORDER (`columns`,
+// analyzed columns first) with `pinned` marking them.
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useSourcesStore } from '../../stores/sources.js'
@@ -19,27 +26,16 @@ import ColumnMenu from './ColumnMenu.vue'
 import ScrollHints from './ScrollHints.vue'
 import { DataLoader, Icon } from '../ui'
 
-// `preview` = the compact copy the Analyze workspace shows under its figures, so the user
-// always sees the rows those figures are computed on: capped height, static headers, no
-// lazy append - those would fire a query from a surface meant to answer one question only
-// ("what am I analyzing?"). Its CELLS, however, are as live as the browsing table's (user
-// ask 2026-08-13): clicking a value offers the same two actions - queue it as context for
-// the next question, or filter the whole scope on it - because the analysis and the rows
-// under it share one filter state, so a cell filter re-computes the figures above too.
-// The workspace feeds it its OWN bounded window (`rows`, refetched on every scope change
-// by the store) and its own column ORDER (`columns`, analyzed columns first) with `pinned`
-// marking them; left null, everything comes from the store exactly as the browsing table
-// has always read it.
 const props = defineProps({
-  preview: { type: Boolean, default: false },
-  rows: { type: Array, default: null },
+  // Column set + ORDER override ([{ name, type }]); null = the host store's columns.
   columns: { type: Array, default: null },
+  // Column names marked as analyzed (display only, the host already ordered them).
   pinned: { type: Array, default: null },
-  loading: { type: Boolean, default: false },
-  // Host store owning the FILTER state these cells act on (chips / addFilter /
-  // setChipValues). Null = the standalone sources store, which is also the only host of
-  // the browsing table; the Analyze workspace passes its own host, so a cell clicked in
-  // the Evidence "Source data" tab filters the EXCHANGE scope, never the explorer's.
+  // Host store owning the rows window (rows / hasMore / loadMoreRows / sort / totals)
+  // AND the filter state these cells act on (chips / addFilter / setChipValues). Null =
+  // the standalone sources store; the Analyze workspace passes its own host, so a cell
+  // clicked in the Evidence "Source data" tab filters the EXCHANGE scope, never the
+  // explorer's.
   surface: { type: Object, default: null },
   // Provenance reported to the prompt context for a picked cell. Null = the host's own
   // active source label (the standalone explorer knows it; the Evidence host names its
@@ -65,10 +61,9 @@ const sources = useSourcesStore()
 const promptContext = usePromptContextStore()
 const { push } = useToasts()
 
-// The store the FILTER surface of this table belongs to. Everything that reads or writes
-// filter chips goes through it; the browsing-only machinery (row window, sort, lazy
-// append, the Analyze sigma) stays on the sources store, which is the only host that has
-// it - the preview never renders those controls.
+// The store this table belongs to. EVERYTHING goes through it: the rows window, sort,
+// lazy append, totals, the Analyze sigma AND the filter chips. Both hosts (sources and
+// evidence stores) expose the same browsing contract under the same names.
 const host = computed(() => props.surface || sources)
 
 // The DB-computed column statistics strip (sum / avg / min / max of the sigma-expanded
@@ -77,16 +72,15 @@ const host = computed(() => props.surface || sources)
 function fmtStat(v) {
   return formatStatNumber(v, locale.value)
 }
-// Column set + ORDER: the host's when it provides one (the workspace preview pins the
+// Column set + ORDER: the caller's when it provides one (the Analyze workspace pins the
 // analyzed columns first), the store's otherwise.
-const allColumns = computed(() => props.columns || sources.columns || [])
+const allColumns = computed(() => props.columns || host.value.columns || [])
 const colCount = ref(COLS_INITIAL)
 const columns = computed(() => allColumns.value.slice(0, colCount.value))
 const colsWindowed = computed(() => allColumns.value.length > columns.value.length)
-// Row window + busy flag: the host's bounded preview window, or the store's accumulating
-// browsing window.
-const tableRows = computed(() => (props.rows ? props.rows : sources.rows))
-const tableBusy = computed(() => (props.preview ? props.loading : sources.rowsLoading))
+// The host's accumulating rows window + its busy flag.
+const tableRows = computed(() => host.value.rows || [])
+const tableBusy = computed(() => !!host.value.rowsLoading)
 // The analyzed columns, marked (display only - no reordering happens here, the host
 // already ordered them).
 const pinnedSet = computed(() => new Set(props.pinned || []))
@@ -95,7 +89,7 @@ const pinnedSet = computed(() => new Set(props.pinned || []))
 // lights up for them, so the browsing table shows what is already being computed.
 const measuredColumns = computed(() => {
   const set = new Set()
-  for (const m of sources.workspaceMeasures || []) {
+  for (const m of host.value.workspaceMeasures || []) {
     if (m && m.column) set.add(m.column)
   }
   return set
@@ -105,8 +99,8 @@ const measuredColumns = computed(() => {
 // addWorkspaceMeasure refuses the duplicate - and the view still switches, so the click
 // always lands somewhere visible.
 function measureColumn(name) {
-  sources.addWorkspaceMeasure('sum', name)
-  sources.setAnalyzeOpen(true)
+  host.value.addWorkspaceMeasure('sum', name)
+  host.value.setAnalyzeOpen(true)
 }
 
 // Reset the visible window whenever the dataset's columns change (new source). A column
@@ -114,7 +108,7 @@ function measureColumn(name) {
 watch(allColumns, () => { colCount.value = COLS_INITIAL; closeColMenu() })
 
 function sortDir(name) {
-  const s = sources.sort
+  const s = host.value.sort
   return s && s.column === name ? s.dir : ''
 }
 // Numeric QUANTITY columns by name (DSS storage type says numeric, name does not
@@ -169,7 +163,7 @@ function usePopoverValue() {
 }
 
 // Filter on the clicked cell's exact value, against the HOST's filter state (the home
-// explorer, the embedded agent-mode explorer in Evidence, or - from the Analyze preview -
+// explorer, the embedded agent-mode explorer in Evidence, or - from the Analyze data pane -
 // whichever store hosts the workspace). The value is used RAW (the same string the popover
 // carries for the context action), never merged into a temporal BETWEEN chip; which chip
 // it may join is the shared rule pickCellFilterChip (a locked agent chip is never touched):
@@ -227,11 +221,11 @@ const menuSortDir = computed(() => (colMenu.value ? sortDir(colMenu.value.column
 const menuFiltered = computed(() => (colMenu.value ? isFiltered(colMenu.value.column) : false))
 const menuCanFilter = computed(() => host.value.chips.length < MAX_FILTERS)
 function onMenuSort(dir) {
-  if (colMenu.value) sources.setSort(colMenu.value.column, dir)
+  if (colMenu.value) host.value.setSort(colMenu.value.column, dir)
   closeColMenu()
 }
 function onMenuFilter() {
-  if (colMenu.value) sources.requestColumnFilter(colMenu.value.column)
+  if (colMenu.value) host.value.requestColumnFilter(colMenu.value.column)
   closeColMenu()
 }
 
@@ -261,7 +255,7 @@ function setupObserver() {
   observer = new IntersectionObserver(
     (entries) => {
       for (const entry of entries) {
-        if (entry.isIntersecting) sources.loadMoreRows()
+        if (entry.isIntersecting) host.value.loadMoreRows()
       }
     },
     { root: scrollEl.value, rootMargin: '200px 0px', threshold: 0 },
@@ -320,8 +314,8 @@ watch(scrollEl, (el, old) => {
 })
 
 // The cards are FIXED and teleported to body, so a scroll of ANY ancestor moves the cell
-// out from under them (the Analyze workspace is itself one scrollport, and its preview
-// table rides inside it). A capture-phase document listener sees every scroll in the page
+// out from under them (the Analyze workspace can itself scroll on a short panel, and its
+// data pane rides inside it). A capture-phase document listener sees every scroll in the page
 // wherever it happens; it is bound only while a card is actually open, so the common case
 // costs nothing.
 let docScrollBound = false
@@ -352,7 +346,7 @@ const { canLeft, canRight, canDown, hiddenRight, stepLeft, stepRight, stepDown }
        first-load skeleton must keep full opacity or its shimmer washes out. The
        DataLoader overlay rides the same condition (delayed fade-in inside it keeps
        fast refreshes flicker-free). -->
-  <div class="src-table" :class="{ busy: tableBusy && tableRows.length > 0, 'is-preview': preview }">
+  <div class="src-table" :class="{ busy: tableBusy && tableRows.length > 0 }">
     <DataLoader v-if="tableBusy && tableRows.length > 0" :label="t('src.crunch')" />
     <!-- The scroll viewport and its affordance overlay share ONE positioning context, so
          the pills sit on the data edges and not on the footer bars below. -->
@@ -364,17 +358,11 @@ const { canLeft, canRight, canDown, hiddenRight, stepLeft, stepRight, stepDown }
             <th
               v-for="c in columns"
               :key="c.name"
-              :class="{ sorted: !preview && sortDir(c.name), filtered: isFiltered(c.name), num: numericByName[c.name], pinned: pinnedSet.has(c.name) }"
+              :class="{ sorted: sortDir(c.name), filtered: isFiltered(c.name), num: numericByName[c.name], pinned: pinnedSet.has(c.name) }"
               :title="pinnedSet.has(c.name) ? t('src.ws.pinned') : null"
             >
               <div class="th-inner">
-                <!-- Preview: a static label. Sorting would ask the server for a window
-                     the Analyze view deliberately does not re-fetch. -->
-                <span v-if="preview" class="th-btn th-static">
-                  <span class="th-label">{{ c.name }}</span>
-                </span>
-                <template v-else>
-                <button type="button" class="th-btn" @click="sources.setSort(c.name)">
+                <button type="button" class="th-btn" @click="host.setSort(c.name)">
                   <span class="th-label">{{ c.name }}</span>
                   <span v-if="sortDir(c.name)" class="th-sort">
                     <Icon :name="sortDir(c.name) === 'asc' ? 'chevronUp' : 'chevronDown'" />
@@ -405,7 +393,6 @@ const { canLeft, canRight, canDown, hiddenRight, stepLeft, stepRight, stepDown }
                 >
                   <Icon name="chevronDown" />
                 </button>
-                </template>
               </div>
             </th>
             <!-- Horizontal column sentinel: reveals the next batch of columns when
@@ -434,10 +421,9 @@ const { canLeft, canRight, canDown, hiddenRight, stepLeft, stepRight, stepDown }
         </tbody>
       </table>
       <!-- Infinite-scroll sentinel: present only while there ARE rows and the server
-           still has more (and the client cap is not hit). Never in the preview: it
-           shows the window already loaded, it does not go asking for more. -->
+           still has more (and the client cap is not hit). -->
       <div
-        v-if="!preview && tableRows.length && sources.hasMore"
+        v-if="tableRows.length && host.hasMore"
         ref="sentinelEl"
         class="src-table-sentinel"
         aria-hidden="true"
@@ -458,32 +444,29 @@ const { canLeft, canRight, canDown, hiddenRight, stepLeft, stepRight, stepDown }
         @down="stepDown"
       />
     </div>
-    <!-- Recoverable rows-level error of the BROWSING window: the search + filters above
-         stay usable. The preview has its own window (and its own error state): a browsing
-         failure must not surface under rows the preview loaded fine. -->
-    <div v-if="!preview && sources.rowsError" class="src-table-error">
+    <!-- Recoverable rows-level error of the rows window: the search + filters above
+         stay usable. -->
+    <div v-if="host.rowsError" class="src-table-error">
       <span>{{ t('src.error') }}</span>
-      <button @click="sources.refreshRows()">{{ t('src.retry') }}</button>
+      <button @click="host.refreshRows()">{{ t('src.retry') }}</button>
     </div>
     <!-- Footer: how many rows are loaded, how many columns are shown, and whether
-         more rows remain (lazy). The preview drops it: its own header already states
-         how many rows are shown out of how many the filter selects. -->
-    <div v-if="!preview" class="src-table-foot">
+         more rows remain (lazy). -->
+    <div class="src-table-foot">
       <span class="mono page">{{ t('src.loaded', [tableRows.length]) }}</span>
       <span class="foot-spacer" />
       <span v-if="colsWindowed" class="cols-hint">{{ t('src.cols', [columns.length, allColumns.length]) }}</span>
-      <span v-if="!preview && sources.hasMore" class="more-hint">{{ t('src.more') }}</span>
+      <span v-if="host.hasMore" class="more-hint">{{ t('src.more') }}</span>
     </div>
     <!-- Totals bar (Excel-like status strip): the DB-EXACT row count over the current
-         filter. The per-column key figures now live in the Calculate zone at the top.
-         The preview drops it: the Analyze view already states that count above it. -->
-    <div v-if="!preview" class="src-totals">
+         filter. The per-column key figures now live in the Calculate zone at the top. -->
+    <div class="src-totals">
       <span class="src-totals-rows mono">
-        <template v-if="sources.totalLoading && sources.totalCount == null">
+        <template v-if="host.totalLoading && host.totalCount == null">
           <span class="dots" aria-hidden="true"><i /><i /><i /></span>
         </template>
-        <template v-else-if="sources.totalCount != null">
-          {{ t('src.stats.rows', [fmtStat(sources.totalCount)]) }}
+        <template v-else-if="host.totalCount != null">
+          {{ t('src.stats.rows', [fmtStat(host.totalCount)]) }}
         </template>
       </span>
     </div>
@@ -536,12 +519,6 @@ const { canLeft, canRight, canDown, hiddenRight, stepLeft, stepRight, stepDown }
   max-height: min(60vh, 480px);
   min-height: 220px;
 }
-/* Preview (Analyze view): a compact strip of the very rows being analyzed - tall enough
-   to read a handful of lines, short enough to stay a companion to the pivot above. */
-.src-table.is-preview .src-table-scroll { max-height: 220px; min-height: 0; }
-/* A static header still reads as a header (uppercase-free real casing, F25), it just
-   makes no promise of sorting. */
-.th-static { cursor: default; }
 /* separate + spacing 0: with `collapse`, the th border scrolls away from a sticky
    header - paint the line as an inset shadow so it sticks with it. */
 table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: var(--fs-sm); }
@@ -554,13 +531,10 @@ thead th {
 /* Sortable affordance: the whole header cell lights up under the pointer, so the
    click target reads before the menu / sigma controls fade in. */
 thead th:hover { color: var(--text); background: var(--surface-hover); }
-/* Preview: nothing in the header is clickable, so nothing in it lights up. */
-.src-table.is-preview thead th:hover { color: var(--text-2); background: var(--surface); }
 /* An ANALYZED column (the grouping, a measured column): ink label over a 2px orange
    cap - the same "this is what the figures are about" cue as a KPI card's top rule,
    discreet enough to leave the other columns readable. */
 thead th.pinned { color: var(--text); box-shadow: inset 0 2px 0 var(--orange), inset 0 -1px 0 var(--border); }
-.src-table.is-preview thead th.pinned:hover { color: var(--text); }
 /* Sorted column: same AA-safe orange-text token as .filtered (small text). */
 thead th.sorted { color: var(--orange-text); }
 /* Filtered column: orange text cue (charte: orange text only, no background fill). */

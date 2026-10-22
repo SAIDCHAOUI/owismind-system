@@ -14,7 +14,9 @@ import {
   REVENUES, REVENUE_COLUMNS, TICKETS, TICKET_COLUMNS,
   applyFilters, applySearch, applyDrill, sortRows, paginate, aggregate, distinctValues,
 } from './data.mjs'
-import { pickScenario, buildRevenueScenario, buildWorkspaceScenario, buildChartPayload, buildKpiPayload } from './scenario.mjs'
+import { pickScenario, buildRevenueScenario, buildWorkspaceScenario, buildContinueScenario, wantsContinue, buildChartPayload, buildKpiPayload } from './scenario.mjs'
+// Studio continuity (mirror of routes / stream_manager / context / reducer.build_carry).
+import { studioPointer, resolveStudioBase, buildCarry, rebindWidgets } from './studio.mjs'
 // V2 workspace: the frontend's PURE reducer and payload builders are pinned to the
 // backend's by the shared contract fixtures, so the mock reuses them to play the
 // worker's role (reduce + finalize at run end) and GET /workspace's joins. Read-only
@@ -24,6 +26,14 @@ import {
   buildChartPayload as buildWidgetChart,
   buildKpiPayload as buildWidgetKpi,
 } from '../../plugin/owismind/frontend/src/composables/widgetData.js'
+// LIVE mode (real Claude agents over sqlite datasets) - see live/ and the README.
+import { loadHarnessConfig } from './live/config.mjs'
+import { createLiveBackend } from './live/liveApi.mjs'
+
+// Resolved once: `live` when dev-harness/.env (or the env) holds ANTHROPIC_API_KEY,
+// `stub` when forced (canned fake model), else the historical `scripted` mode.
+const CONFIG = loadHarnessConfig()
+let LIVE = null // the live backend, created on the first createMockApi() call
 
 // --- mock identity + agents -----------------------------------------------------
 
@@ -105,6 +115,16 @@ const MY_AGENT_REQUESTS = [
   },
 ]
 
+// Live mode: the orchestrator exposes the three sqlite datasets as its sources.
+function agentsPayload() {
+  if (!LIVE) return AGENTS
+  return AGENTS.map((a) => ({
+    ...a,
+    capabilities: [...a.capabilities, 'Won opportunities: deal amounts and contract lengths'],
+    sources: LIVE.sources,
+  }))
+}
+
 // --- in-memory state (exchanges, conversations, live runs) -----------------------
 
 let exchangeSeq = 1000
@@ -184,17 +204,24 @@ function lightSqlItems(sqlItems) {
 // Mirror of stream_manager's end-of-run step: reduce the run's workspace events, stamp
 // the status + exchange id, re-bind data widgets (orphan when their sql_id was never
 // captured). null when the run emitted no workspace operation (no row is written).
+// Like reducer.is_empty, next steps alone (suggest.set) are content: the row is written
+// so the chips replay on reload, while the Studio still opens on widgets / plan only.
 function buildWorkspaceDoc(exchangeId, events, status, sqlItems) {
   const ws = events.filter((e) => e && e.type === 'workspace')
   if (!ws.length) return null
   const state = reduceWorkspace(ws, exchangeId)
-  if (!hasWorkspaceContent(state)) return null
+  const hasSuggestions = Array.isArray(state.suggestions) && state.suggestions.length > 0
+  if (!hasWorkspaceContent(state) && !hasSuggestions) return null
   finalizeWorkspace(state, status)
-  const known = new Set((sqlItems || []).map((it) => it.sql_id))
-  for (const w of state.widgets) {
-    if (w.kind !== 'text') w.binding = known.has(w.sql_id) ? 'explicit' : 'orphan'
-  }
-  return state
+  // Carried widgets (Studio continuity, `origin` set) keep their binding: their SQL
+  // lives in their origin exchange (reducer.finalize skips them).
+  return rebindWidgets(state, new Set((sqlItems || []).map((it) => it.sql_id)))
+}
+
+// A stored workspace offers the Studio when it has a plan or at least one widget; one
+// holding only next steps (suggest.set) does not (storage.workspace_flags "studio").
+function offersStudio(doc) {
+  return !!(doc && ((doc.plan && typeof doc.plan === 'object') || (Array.isArray(doc.widgets) && doc.widgets.length)))
 }
 
 function persistExchange(sessionId, exchangeId, userText, agentKey, mode, scenario, createdAt) {
@@ -221,10 +248,15 @@ function persistExchange(sessionId, exchangeId, userText, agentKey, mode, scenar
     estimated_cost: scenario.usage.estimated_cost,
     mode: mode || 'smart',
     screen_ctx: null,
-    // V2: /conversation flags each row whose exchange stored a workspace.
-    has_workspace: !!scenario.workspace,
+    // V2: /conversation flags each row whose stored workspace offers a Studio (plan or
+    // widgets) and carries its next steps (port of storage.workspace_flags).
+    has_workspace: offersStudio(scenario.workspace),
+  }
+  if (scenario.workspace && Array.isArray(scenario.workspace.suggestions) && scenario.workspace.suggestions.length) {
+    row.suggestions = [...scenario.workspace.suggestions]
   }
   EXCHANGES.set(exchangeId, {
+    live: !!scenario.live,
     row,
     evidence: scenario.evidence,
     artifacts: scenario.artifacts,
@@ -239,6 +271,24 @@ function persistExchange(sessionId, exchangeId, userText, agentKey, mode, scenar
   conv.exchange_ids.push(exchangeId)
   conv.last_at = nowIso()
   return row
+}
+
+// The previous turns of a conversation (oldest first) for a live run's context. Mirror
+// of context.flatten_exchanges_to_messages: the assistant turn carries the bounded
+// "[SQL généré pour cette réponse : ...]" block of its stored SQL (grounding).
+function sqlContext(items) {
+  const parts = (items || []).map((it) => String((it && it.sql) || '').trim()).filter(Boolean)
+  return parts.length ? '\n\n[SQL généré pour cette réponse :\n' + parts.join('\n').slice(0, 4000) + ']' : ''
+}
+
+function conversationHistory(sessionId, limit) {
+  const conv = CONVERSATIONS.get(sessionId)
+  if (!conv || !limit) return []
+  return conv.exchange_ids.slice(-limit).map((id) => {
+    const row = EXCHANGES.get(id).row
+    const assistant = row.assistant_text ? row.assistant_text + sqlContext(row.generated_sql) : row.assistant_text
+    return { user: row.user_text, assistant }
+  })
 }
 
 // Seed one finished conversation so the sidebar, reload path and Evidence panel
@@ -267,15 +317,13 @@ function persistExchange(sessionId, exchangeId, userText, agentKey, mode, scenar
 
 // GET /workspace (mirror of the real route): the stored reduced state + the joins by
 // sql_id (raw SQL, filters, captured result block) + server-built widget payloads.
-function workspaceFor(exchangeId) {
-  const entry = EXCHANGES.get(exchangeId)
-  if (!entry || !entry.workspace) return null
-  const ws = entry.workspace
+// Mirror of workspace/resolve.py: result ALWAYS present ({captured:false} = no rows).
+function resolveEntries(entry, sqlIds) {
   const resolved = {}
-  for (const sid of ws.summary.sql_ids) {
-    const item = entry.sqlItems.find((it) => it.sql_id === sid)
-    if (!item) continue
-    // Mirror of workspace/resolve.py: result ALWAYS present ({captured:false} = no rows).
+  for (const sid of sqlIds) {
+    const items = (entry.sqlItems || []).filter((it) => it.sql_id === sid)
+    if (items.length !== 1) continue      // missing or ambiguous: never resolved
+    const item = items[0]
     resolved[sid] = {
       sql: item.sql,
       success: item.success != null ? !!item.success : null,
@@ -288,19 +336,48 @@ function workspaceFor(exchangeId) {
         : { captured: false, row_count: item.row_count != null ? item.row_count : null },
     }
   }
+  return resolved
+}
+
+function widgetData(w, resolved) {
+  if (w.binding === 'orphan') return { ok: false, reason: 'orphan' }
+  const result = resolved[w.sql_id] ? resolved[w.sql_id].result : null
+  if (w.kind === 'chart') return buildWidgetChart(result, w.chart)
+  if (w.kind === 'kpi') return buildWidgetKpi(result, w.kpi)
+  return result && result.captured ? { ok: true } : { ok: false, reason: 'no_data' }
+}
+
+function workspaceFor(exchangeId) {
+  const entry = EXCHANGES.get(exchangeId)
+  if (!entry || !entry.workspace) return null
+  const ws = entry.workspace
+  const own = ws.widgets.filter((w) => !w.origin)
+  const carried = ws.widgets.filter((w) => w.origin)
+  const ownIds = [...ws.summary.sql_ids]
+  for (const w of own) if (w.sql_id && !ownIds.includes(w.sql_id)) ownIds.push(w.sql_id)
+  const resolved = resolveEntries(entry, ownIds)
   const widgetsData = {}
-  for (const w of ws.widgets) {
-    if (w.kind === 'text') continue
-    if (w.binding === 'orphan') {
-      widgetsData[w.id] = { ok: false, reason: 'orphan' }
+  for (const w of own) if (w.kind !== 'text') widgetsData[w.id] = widgetData(w, resolved)
+  // Studio continuity: carried widgets resolve against their ORIGIN exchange only
+  // (its sql_id s1q1 is minted per run); a missing origin reads as orphan.
+  const origins = {}
+  for (const originId of [...new Set(carried.map((w) => w.origin))].slice(0, 12)) {
+    const group = carried.filter((w) => w.origin === originId)
+    const origin = EXCHANGES.get(originId)
+    if (!origin) {
+      for (const w of group) if (w.kind !== 'text') widgetsData[w.id] = { ok: false, reason: 'orphan' }
       continue
     }
-    const result = resolved[w.sql_id] ? resolved[w.sql_id].result : null
-    if (w.kind === 'chart') widgetsData[w.id] = buildWidgetChart(result, w.chart)
-    else if (w.kind === 'kpi') widgetsData[w.id] = buildWidgetKpi(result, w.kpi)
-    else widgetsData[w.id] = result && result.captured ? { ok: true } : { ok: false, reason: 'no_data' }
+    const sids = [...new Set(group.map((w) => w.sql_id).filter(Boolean))]
+    const oResolved = resolveEntries(origin, sids)
+    const prov = (origin.workspace && origin.workspace.provenance) || {}
+    origins[originId] = {
+      resolved: oResolved,
+      provenance: Object.fromEntries(sids.filter((sid) => prov[sid]).map((sid) => [sid, prov[sid]])),
+    }
+    for (const w of group) if (w.kind !== 'text') widgetsData[w.id] = widgetData(w, oResolved)
   }
-  return { status: 'ok', workspace: ws, events: null, resolved, widgets_data: widgetsData }
+  return { status: 'ok', workspace: ws, events: null, resolved, widgets_data: widgetsData, origins }
 }
 
 // --- evidence meta assembly (mirrors evidence_meta + the route enrichment) -------
@@ -333,7 +410,8 @@ function activeEvidence(entry, sqlId) {
 function queriesFor(entry, activeItem) {
   const widgetsBySql = {}
   for (const w of (entry.workspace && entry.workspace.widgets) || []) {
-    if (!w.sql_id) continue
+    // A carried widget's sql_id belongs to its ORIGIN exchange.
+    if (!w.sql_id || w.origin) continue
     if (!widgetsBySql[w.sql_id]) widgetsBySql[w.sql_id] = []
     widgetsBySql[w.sql_id].push({ id: w.id, kind: w.kind, title: w.title, source: 'workspace' })
   }
@@ -490,7 +568,37 @@ function handleChatStart(body) {
   const sessionId = body.session_id || 'sess-' + Date.now()
   const exchangeId = 'ex-' + ++exchangeSeq
   const runId = 'run-' + ++runSeq + '-' + Math.random().toString(36).slice(2, 8)
-  const scenario = pickScenario(body.message, exchangeId)
+  // Studio continuity (stream_manager._resolve_studio_base): the Studio shown
+  // (screen_context.studio_exchange_id, a pointer only) or the newest exchange of the
+  // conversation with a workspace, validated (same session, not running, widgets).
+  const conv = CONVERSATIONS.get(sessionId)
+  const studioBase = resolveStudioBase({
+    exchanges: EXCHANGES,
+    chain: conv ? conv.exchange_ids : [],
+    sessionId,
+    exchangeId,
+    pointer: studioPointer(body.screen_context),
+  })
+  if (LIVE) {
+    const run = {
+      exchangeId,
+      sessionId,
+      userText: String(body.message || ''),
+      agentKey: body.agent_key || 'ag_owismind',
+      mode: body.mode || 'smart',
+      startedAt: Date.now(),
+      persisted: false,
+      studioBase,
+    }
+    RUNS.set(runId, run)
+    LIVE.startRun(run, body)
+    return { status: 'ok', run_id: runId, exchange_id: exchangeId }
+  }
+  // Scripted continue: a message that refines what is on screen, with a valid base,
+  // plays the continue run (its studio.carry already expanded, as the worker relays it).
+  const scenario = studioBase && wantsContinue(body.message)
+    ? buildContinueScenario(exchangeId, (seq, ts) => buildCarry(studioBase.doc, studioBase.baseId, seq, [], ts))
+    : pickScenario(body.message, exchangeId)
   RUNS.set(runId, {
     scenario,
     exchangeId,
@@ -525,6 +633,7 @@ function materializedEvents(run) {
 function handleChatPoll(query) {
   const run = RUNS.get(query.run_id)
   if (!run) return { httpStatus: 404, payload: { status: 'error', error: 'run_not_found' } }
+  if (run.live) return { httpStatus: 200, payload: LIVE.poll(run, query.cursor) }
   const elapsed = Date.now() - run.startedAt
   const finished = run.stopAt != null || elapsed >= run.scenario.lastAt + 150
   let visible
@@ -562,6 +671,7 @@ function handleChatPoll(query) {
 }
 
 function handleSourceRoute(pathname, body, query) {
+  if (LIVE) return LIVE.handleSource(pathname, body, query)
   const agentKey = body.agent != null ? body.agent : query.agent
   const sourceId = Number(body.source != null ? body.source : query.source) || 0
   const defs = SOURCES[agentKey] || SOURCES.ag_owismind
@@ -622,6 +732,8 @@ function handleEvidenceRoute(pathname, body, query) {
       },
     }
   }
+  // Live exchanges re-query the sqlite tables (scripted ones keep the JS engine).
+  if (entry.live) return LIVE.evidenceRoute(pathname, body, entry)
   if (pathname.endsWith('/rows')) {
     let rows = evidenceBaseRows(entry, body)
     rows = sortRows(rows, body.sort)
@@ -652,6 +764,15 @@ function handleEvidenceRoute(pathname, body, query) {
 // --- the middleware ------------------------------------------------------------------
 
 export function createMockApi() {
+  if (CONFIG.mode !== 'scripted' && !LIVE) {
+    LIVE = createLiveBackend(CONFIG, { persistExchange, buildWorkspaceDoc, queriesFor, conversationHistory })
+  }
+  console.log(
+    `[owi-harness] mode: ${CONFIG.mode}`
+      + (CONFIG.mode === 'live' ? ` (model ${CONFIG.model}, key from .env or ANTHROPIC_API_KEY)` : '')
+      + (CONFIG.mode === 'stub' ? ' (canned fake model, no network)' : '')
+      + (CONFIG.mode === 'scripted' ? ' (no ANTHROPIC_API_KEY found)' : ''),
+  )
   return async function owismindMockApi(req, res, next) {
     const url = new URL(req.url, 'http://localhost')
     const pathname = url.pathname
@@ -669,7 +790,7 @@ export function createMockApi() {
       case route === '/me':
         return sendJson(res, 200, ME)
       case route === '/agents':
-        return sendJson(res, 200, { status: 'ok', count: AGENTS.length, agents: AGENTS })
+        return sendJson(res, 200, { status: 'ok', count: AGENTS.length, agents: agentsPayload() })
       case route === '/usage':
         return sendJson(res, 200, {
           status: 'ok',
@@ -707,6 +828,10 @@ export function createMockApi() {
       }
       case route === '/chat/stop': {
         const run = RUNS.get(body.run_id)
+        if (run && run.live) {
+          if (!LIVE.stop(run)) return sendJson(res, 404, { status: 'error', error: 'run_not_found' })
+          return sendJson(res, 200, { status: 'ok' })
+        }
         if (!run || run.persisted) return sendJson(res, 404, { status: 'error', error: 'run_not_found' })
         run.stopAt = Date.now() - run.startedAt
         return sendJson(res, 200, { status: 'ok' })
@@ -742,7 +867,10 @@ export function createMockApi() {
       }
       case route === '/evidence/meta': {
         if (query.sql_id && !SQL_ID_RE.test(query.sql_id)) return sendJson(res, 400, { status: 'error', error: 'invalid_sql_id' })
-        const meta = evidenceMetaFor(query.exchange_id, query.sql_id)
+        const liveEntry = EXCHANGES.get(query.exchange_id)
+        const meta = liveEntry && liveEntry.live
+          ? LIVE.evidenceMeta(query.exchange_id, liveEntry, query.sql_id)
+          : evidenceMetaFor(query.exchange_id, query.sql_id)
         if (!meta) return sendJson(res, 404, { status: 'error', error: 'exchange_not_found' })
         if (meta.missing) return sendJson(res, 404, { status: 'error', error: 'sql_id_not_found' })
         return sendJson(res, 200, meta)

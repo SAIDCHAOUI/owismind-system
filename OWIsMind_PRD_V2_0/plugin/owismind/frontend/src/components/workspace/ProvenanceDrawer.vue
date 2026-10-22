@@ -21,7 +21,8 @@ const { push } = useToasts()
 const closeBtn = ref(null)
 
 const sqlId = computed(() => ws.drawerSqlId)
-const info = computed(() => ws.sqlInfo(sqlId.value))
+// A carried widget's result is read from its origin answer (ws.drawerOrigin).
+const info = computed(() => ws.sqlInfo(sqlId.value, ws.drawerOrigin))
 const prov = computed(() => (info.value && info.value.provenance) || null)
 const widget = computed(() => {
   const id = ws.drawerWidgetId
@@ -75,7 +76,7 @@ async function copySql() {
 }
 // The Data tab focused on THIS result (its full rows, filters and provenance).
 function openData() {
-  ws.openData(sqlId.value, ws.drawerWidgetId)
+  ws.openData(sqlId.value, ws.drawerWidgetId, ws.drawerOrigin)
 }
 function onKey(e) {
   if (e.key === 'Escape') ws.closeProvenance()

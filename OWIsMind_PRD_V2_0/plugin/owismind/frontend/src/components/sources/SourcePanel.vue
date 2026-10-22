@@ -233,15 +233,13 @@ watch(() => session.selectedAgentKey, (key) => {
   .src-teaser-card { transition: none; }
   .src-teaser-veil:hover .src-teaser-card { transform: none; }
 }
-/* The BROWSING table fills the dock; the Analyze view's read-only preview
-   (`.is-preview`) keeps its own compact height instead. */
-.src-panel-body :deep(.src-table:not(.is-preview)) {
+/* The rows table fills the dock, in the Data view AND in the Analyze workspace's data
+   pane (the same table, user ask 2026-10-20). */
+.src-panel-body :deep(.src-table) {
   flex: 1; min-height: 0; background: var(--bg);
   /* A --bg block on the ambient --surface is a CARD: visible 1px filet (charte). */
   border-color: var(--border-strong);
 }
-.src-panel-body :deep(.src-table:not(.is-preview) .src-table-view) { flex: 1 1 auto; min-height: 0; }
-.src-panel-body :deep(.src-table:not(.is-preview) .src-table-scroll) { flex: 1 1 auto; max-height: none; }
-/* The preview is a --bg card on the ambient --surface too (same filet grammar). */
-.src-panel-body :deep(.src-table.is-preview) { background: var(--bg); border-color: var(--border-strong); }
+.src-panel-body :deep(.src-table .src-table-view) { flex: 1 1 auto; min-height: 0; }
+.src-panel-body :deep(.src-table .src-table-scroll) { flex: 1 1 auto; max-height: none; }
 </style>

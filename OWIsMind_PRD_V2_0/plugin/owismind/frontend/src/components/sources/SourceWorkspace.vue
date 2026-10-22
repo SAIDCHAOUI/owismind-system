@@ -9,8 +9,9 @@
 // and the result surface adapts to it: no grouping -> KPI cards (one per measure);
 // grouping -> a bar table with one column per measure. The result GROWS with what is
 // asked (more measures, more groups) and UNDER it, full width, the very rows those
-// figures come from - the analyzed columns pinned first (user ask 2026-08-13: the
-// dataset being worked on shows completely at the bottom, no side column).
+// figures come from - the analyzed columns pinned first. That data pane IS the Data
+// tab's table (user ask 2026-10-20: same rows window, same lazy append on scroll, same
+// sort / column menus / cell actions, and it fills the panel height downwards).
 //
 // Everything is DB-computed over the FULL filtered set (the same search + filters as the
 // Data view), never over the visible window. The state machine lives in the shared
@@ -19,7 +20,7 @@
 // ONE workspace, TWO hosts (user ask 2026-08-13: a single structure to maintain): the
 // standalone Source explorer (default, sources store) and the Evidence "Source data"
 // tab (its exchange-scoped store via the `surface` prop). Both stores spread the SAME
-// aggregate-surface API and the same preview-window contract, so this component is
+// aggregate-surface API and the same rows-window contract, so this component is
 // host-agnostic - it replaced the legacy Calculate zone + SourceAnalyze pivot.
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -43,10 +44,10 @@ import SourceTable from './SourceTable.vue'
 import { Icon } from '../ui'
 
 const props = defineProps({
-  // Host store carrying the shared aggregate-surface workspace API + the preview-window
-  // contract (previewRows / previewLoading / previewError / refreshPreviewRows /
-  // totalCount). Defaults to the standalone sources store; the Evidence "Source data"
-  // tab passes its exchange-scoped evidence store instead.
+  // Host store carrying the shared aggregate-surface workspace API + the rows-window
+  // contract (rows / hasMore / loadMoreRows / sort / totalCount). Defaults to the
+  // standalone sources store; the Evidence "Source data" tab passes its exchange-scoped
+  // evidence store instead.
   surface: { type: Object, default: null },
   // Typed columns override ([{ name, type }]) for hosts whose columns do not live on
   // the surface store itself (Evidence: the exchange meta's columns).
@@ -88,7 +89,7 @@ function removeMeasure(i) {
 }
 
 // Measure picker: a teleported fixed card anchored under its trigger, so no ancestor
-// overflow (the result / preview panes both scroll) can clip it. TWO triggers share it:
+// overflow (the result / data panes both scroll) can clip it. TWO triggers share it:
 // [+ Add] appends a measure (editIndex null); a MEASURE CHIP swaps its own slot in
 // place (user ask 2026-08-13: change a measure without remove + re-add).
 const addBtn = ref(null)
@@ -188,9 +189,9 @@ const truncationNote = computed(() => {
 const resultScroll = ref(null)
 const resultHints = useScrollHints(resultScroll)
 
-// --- the data preview ----------------------------------------------------------
-// The columns the figures are about, pinned first in the preview: the group column, then
-// each measure's column (row count has none), deduped in builder order.
+// --- the data pane --------------------------------------------------------------
+// The columns the figures are about, pinned first in the data table: the group column,
+// then each measure's column (row count has none), deduped in builder order.
 const pinnedColumns = computed(() => {
   const names = []
   if (groupColumn.value) names.push(groupColumn.value)
@@ -199,14 +200,14 @@ const pinnedColumns = computed(() => {
   }
   return names
 })
-const previewColumns = computed(() => orderPreviewColumns(allColumns.value, pinnedColumns.value))
-const previewOpen = ref(true)
+const dataColumns = computed(() => orderPreviewColumns(allColumns.value, pinnedColumns.value))
 
 onMounted(() => {
   // Declare the workspace visible: the surface computes its first result, and the store
-  // starts keeping the preview window in step with the scope.
+  // keeps the shared rows window in step with the scope (the data pane shows it). A
+  // window a scope change skipped while nothing displayed it is caught up here.
   sources.setWorkspaceActive(true)
-  sources.refreshPreviewRows()
+  sources.ensureFreshRows()
 })
 onBeforeUnmount(() => {
   sources.setWorkspaceActive(false)
@@ -306,8 +307,8 @@ onBeforeUnmount(() => {
         </div>
         <div v-else-if="emptySelection" class="ws-state">{{ t('src.ws.no_rows') }}</div>
 
-        <!-- No grouping: one KPI card per measure (charte recipe - square card, orange
-             top rule, caps label, big heavy figure). -->
+        <!-- No grouping: one KPI card per measure (V2 card recipe - 1px filet, caps
+             label, big figure; no orange rule on cards). -->
         <div v-else-if="!grouped" class="ws-kpis" :class="{ busy: sources.workspaceLoading }">
           <div v-for="(m, i) in measures" :key="measureKey(m)" class="ws-kpi">
             <span class="ws-kpi-label">{{ measureLabel(m) }}</span>
@@ -396,45 +397,20 @@ onBeforeUnmount(() => {
         <div v-else class="ws-state">{{ t('src.an.no_rows') }}</div>
       </section>
 
-      <!-- THE DATA - the rows every figure above is computed on, analyzed columns first. -->
-      <aside class="ws-preview" :class="{ 'is-collapsed': !previewOpen }">
-        <div class="ws-preview-head">
-          <span class="ws-preview-label">{{ t('src.ws.preview') }}</span>
-          <!-- The counter states what IS on screen: it must stay silent while the window
-               failed to load (0 rows shown would read as "the filter selects nothing"). -->
-          <span v-if="!sources.previewError && sources.totalCount != null" class="ws-preview-count mono">
-            {{ t('src.ws.preview_count', [sources.previewRows.length, fmtStat(sources.totalCount)]) }}
-          </span>
-          <span class="ws-preview-spacer" />
-          <button
-            type="button"
-            class="ws-preview-toggle"
-            :class="{ closed: !previewOpen }"
-            :title="previewOpen ? t('src.ws.preview_collapse') : t('src.ws.preview_expand')"
-            :aria-label="previewOpen ? t('src.ws.preview_collapse') : t('src.ws.preview_expand')"
-            :aria-expanded="previewOpen"
-            @click="previewOpen = !previewOpen"
-          ><Icon name="chevronDown" /></button>
-        </div>
-        <!-- A failed window is an ERROR, never an empty table: an empty grid here would
-             claim the filtered selection holds no rows. Retry re-fetches the window. -->
-        <div v-if="sources.previewError" class="ws-state error">
-          <span>{{ t('src.error') }}</span>
-          <button type="button" @click="sources.refreshPreviewRows()">{{ t('src.retry') }}</button>
-        </div>
-        <!-- Its cells act on the SAME host as the figures above (surface): filtering on a
-             value here re-computes the analysis, it does not touch another explorer. -->
+      <!-- THE DATA - the rows every figure above is computed on, analyzed columns first.
+           The SAME table, rows window and footer as the Data tab (lazy append on scroll,
+           sort, column menus, cell actions), filling the rest of the panel height. Its
+           cells act on the SAME host as the figures above (surface): filtering on a value
+           here re-computes the analysis, it does not touch another explorer. -->
+      <section class="ws-data">
+        <span class="ws-data-label">{{ t('src.ws.preview') }}</span>
         <SourceTable
-          v-else
-          preview
-          :rows="sources.previewRows"
-          :loading="sources.previewLoading"
-          :columns="previewColumns"
+          :columns="dataColumns"
           :pinned="pinnedColumns"
           :surface="surface"
           :source-label="sourceLabel"
         />
-      </aside>
+      </section>
     </div>
 
     <MeasurePicker
@@ -451,11 +427,10 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-/* The workspace IS the scrollport (user ask 2026-08-13): builder, result and the data
-   table flow at their natural heights and the WHOLE surface scrolls vertically - scroll
-   down to read the full dataset, scroll back up and the analysis is exactly where it
-   was. Each big table still caps its own height with an inner scroll, so neither can
-   turn the page into an endless tunnel. */
+/* Same geometry as the Data view (user ask 2026-10-20): builder and result at their
+   natural heights, then the data table FILLS the rest of the panel downwards and owns
+   the only row scroll (lazy append included). On a panel too short for the result plus
+   the data floor, the whole workspace scrolls as a fallback. */
 .src-ws { display: flex; flex-direction: column; gap: var(--s-4); flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; }
 
 /* --- THE BUILDER ------------------------------------------------------------- */
@@ -478,7 +453,7 @@ onBeforeUnmount(() => {
 }
 .ws-chips { display: contents; }
 
-/* A measure chip: rounded, flat, 1px filet. The BODY is a button opening the measure
+/* A measure chip: small V2 radius, flat, 1px filet. The BODY is a button opening the measure
    list to swap this slot in place (the caret says so); the x is its own removal. */
 .ws-chip {
   display: inline-flex; align-items: center; gap: 4px; max-width: 100%;
@@ -516,7 +491,7 @@ onBeforeUnmount(() => {
   .ws-chip-enter-active, .ws-chip-leave-active { transition: none; }
 }
 
-/* [+ Add] - separate from the chips, ghost until hovered. */
+/* [+ Add] - separate from the chips, ghost until hovered. Same radius as them. */
 .ws-add {
   display: inline-flex; align-items: center; gap: 5px; flex: none;
   padding: 5px 12px;
@@ -533,7 +508,7 @@ onBeforeUnmount(() => {
 /* A 1px filet between what is measured and what it is measured over. */
 .ws-sep { flex: none; width: 1px; height: 18px; background: var(--border); margin: 0 var(--s-1); }
 
-/* The grouping controls - rounded pills holding a native select (a native list can never
+/* The grouping controls - framed boxes holding a native select (a native list can never
    be clipped by a scrolling pane, and reads with the OS the user knows). */
 .ws-part {
   display: inline-flex; align-items: center; gap: 6px; min-width: 0; flex: none;
@@ -554,29 +529,32 @@ onBeforeUnmount(() => {
 @media (prefers-reduced-motion: reduce) { .ws-part { transition: none; } }
 
 /* --- BODY: result over data --------------------------------------------------- */
-/* Natural heights inside the scrolling workspace: nothing fights for the viewport. */
-.ws-body { display: flex; flex-direction: column; gap: var(--s-4); flex: none; }
+/* The body is sized BY the panel, never by its content: the data table must own a
+   bounded scrollport, or 100 rows would stretch it, the workspace would scroll instead
+   and the lazy-append sentinel (observed inside the table scroll) would fire window
+   after window. The result keeps its natural height and the data pane takes everything
+   left, down to a readable floor; below that floor the pane overflows and the
+   workspace scrolls as the fallback. */
+.ws-body { display: flex; flex-direction: column; gap: var(--s-4); flex: 1 1 auto; min-height: 0; }
 .ws-result { display: flex; flex-direction: column; gap: var(--s-2); flex: none; }
-.ws-preview { display: flex; flex-direction: column; gap: var(--s-2); flex: none; }
-/* Open: the dataset shows at its BROWSING size (~20 rows, same cap as the Data view)
-   and scrolls internally through the whole 50-row window. The `.is-preview` qualifier
-   out-ranks SourceTable's own 220px preview cap (same-specificity rules would
-   otherwise leave the winner to compile order). */
-.ws-preview:not(.is-collapsed) :deep(.src-table.is-preview .src-table-scroll) {
-  max-height: min(60vh, 480px);
-}
+.ws-data { display: flex; flex-direction: column; gap: var(--s-2); flex: 1 1 auto; min-height: 300px; }
+/* The Data tab's table, unbounded: it fills the pane and scrolls inside (the host
+   panels apply the same three rules to the Data view). */
+.ws-data :deep(.src-table) { flex: 1 1 auto; min-height: 0; }
+.ws-data :deep(.src-table-view) { flex: 1 1 auto; min-height: 0; }
+.ws-data :deep(.src-table-scroll) { flex: 1 1 auto; max-height: none; min-height: 160px; }
 
 /* --- KPI cards (no grouping) --------------------------------------------------- */
 .ws-kpis { display: flex; flex-wrap: wrap; gap: var(--s-3); align-content: flex-start; transition: opacity var(--dur) var(--ease); }
 .ws-kpis.busy { opacity: 0.55; }
-/* Charte KPI recipe: square card, 1px filet, HIGH 3px orange rule, caps label, big
-   heavy figure. The one place the accent is spent on this surface. */
+/* V2 KPI card: 1px filet, card radius, caps label, big figure. No orange top rule
+   (the V2 charter bans decorative accent bars on cards). */
 .ws-kpi {
   display: flex; flex-direction: column; gap: 6px;
   flex: 1 1 200px; min-width: 180px; max-width: 100%;
   padding: 14px 16px;
-  border: 1px solid var(--border-strong); border-top: 3px solid var(--orange);
-  border-radius: 0; background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-lg); background: var(--bg);
   animation: ws-rise var(--dur-slow) var(--ease-out) both;
 }
 .ws-kpi:nth-child(2) { animation-delay: 45ms; }
@@ -598,9 +576,9 @@ onBeforeUnmount(() => {
   position: relative; display: flex; flex-direction: column;
   border: 1px solid var(--border); border-radius: 0; min-height: 0;
 }
-/* Natural height up to ~half a screen, then an inner scroll (header + totals stay
+/* Natural height up to ~40% of the screen, then an inner scroll (header + totals stay
    pinned): a 50-group result never buries the dataset below it. */
-.ws-table-scroll { max-height: min(55vh, 520px); overflow: auto; transition: opacity var(--dur) var(--ease); }
+.ws-table-scroll { max-height: min(40vh, 400px); overflow: auto; transition: opacity var(--dur) var(--ease); }
 .ws-table-scroll.busy { opacity: 0.55; }
 .ws-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: var(--fs-sm); }
 .ws-table thead th {
@@ -664,28 +642,11 @@ onBeforeUnmount(() => {
 
 .ws-note { font-size: var(--fs-xs); color: var(--text-3); flex: none; }
 
-/* --- The data preview ---------------------------------------------------------- */
-.ws-preview-head { display: flex; align-items: baseline; gap: var(--s-3); flex: none; }
-.ws-preview-label {
-  font-size: 11px; color: var(--text-2); font-weight: var(--fw-heavy);
+/* --- The data pane -------------------------------------------------------------- */
+.ws-data-label {
+  flex: none; font-size: 11px; color: var(--text-2); font-weight: var(--fw-heavy);
   text-transform: uppercase; letter-spacing: var(--tracking-eyebrow);
 }
-.ws-preview-count { font-size: 11px; color: var(--text-3); }
-.ws-preview-spacer { flex: 1; }
-.ws-preview-toggle {
-  flex: none; display: inline-flex; padding: 3px; border-radius: var(--r-pill);
-  color: var(--text-3); align-self: center;
-  transition: all var(--dur) var(--ease);
-}
-.ws-preview-toggle:hover { background: var(--surface-hover); color: var(--text); }
-.ws-preview-toggle :deep(.ui-icon) { width: 14px; height: 14px; display: block; transition: transform var(--dur) var(--ease); }
-.ws-preview-toggle.closed :deep(.ui-icon) { transform: rotate(-90deg); }
-@media (prefers-reduced-motion: reduce) {
-  .ws-preview-toggle, .ws-preview-toggle :deep(.ui-icon) { transition: none; }
-}
-/* Collapsed: the header plus a couple of rows - the data stays present without
-   giving it any real height. */
-.ws-preview.is-collapsed :deep(.src-table-scroll) { max-height: 96px; }
 
 /* --- States -------------------------------------------------------------------- */
 .ws-state { color: var(--text-3); font-size: var(--fs-sm); display: flex; align-items: center; gap: var(--s-3); }

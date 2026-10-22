@@ -889,9 +889,13 @@ class TestLanguageControl(unittest.TestCase):
         self.assertIsNone(dx.forced_language("no directive here"))
 
     def test_detect_lang_word_boundary(self):
-        # 'revenu' (FR) must not match inside 'revenue' (EN) in the fallback detector.
-        self.assertEqual(orch._detect_lang("revenue EVPL 2026"), "en")
-        self.assertEqual(orch._detect_lang("revenus EVPL 2026"), "fr")
+        # Business nouns (revenue / revenus) carry no weight in the scored fallback:
+        # a bare noun message falls back to the default, function words decide.
+        self.assertEqual(orch._detect_lang("revenue EVPL 2026", default="en"), "en")
+        self.assertEqual(orch._detect_lang("revenus EVPL 2026", default="en"), "en")
+        self.assertEqual(orch._detect_lang("show the revenue EVPL 2026"), "en")
+        self.assertEqual(orch._detect_lang("montre les revenus EVPL 2026",
+                                           default="en"), "fr")
 
 
 class TestNarrateAndStopGuard(unittest.TestCase):

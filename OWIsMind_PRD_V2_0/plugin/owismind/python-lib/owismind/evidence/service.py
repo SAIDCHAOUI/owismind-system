@@ -48,7 +48,7 @@ from owismind.evidence.query_builders import (
     render_predicate,
 )
 from owismind.evidence.source_search import build_search_condition
-from owismind.evidence.whitelist import match_whitelist
+from owismind.evidence.whitelist import foreign_project_tables, match_whitelist
 from owismind.storage.migrations import CHAT_V5_LOGICAL
 from owismind.storage.serialization import (
     frame_to_json_safe_matrix,
@@ -866,6 +866,21 @@ def _context(user_id, exchange_id, preferred_table=None, sql_id=None):
             match, matched_ref = candidate, ref
             break
     if match is None:
+        # Clone residue: the agent's SQL reads "<OTHER_KEY>_<dataset>" while this
+        # project owns "<PROJECT_KEY>_<dataset>" (semantic-model tools not
+        # re-pointed after a project duplication). Never remapped onto the local
+        # dataset (the rows shown would not be the rows the agent read): a
+        # dedicated reason tells the UI, and a WARNING names the fix.
+        foreign = foreign_project_tables(parsed["tables"], candidates, PROJECT_KEY)
+        if foreign:
+            logger.warning(
+                "evidence - foreign_project_table (clone residue): agent reads %s "
+                "while project %s owns %s; re-point the agents' semantic model "
+                "tools / catalog to this project (02_align_clone)",
+                [(f["table"], f["foreign_key"]) for f in foreign], PROJECT_KEY,
+                [f["dataset"] for f in foreign],
+            )
+            raise EvidenceError("foreign_project_table")
         # Diagnostic: show the agent's tables vs the discovered candidates so the
         # mismatch (no SQL dataset in the project vs a name/schema difference) is
         # clear in the backend log.

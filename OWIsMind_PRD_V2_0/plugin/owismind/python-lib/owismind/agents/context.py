@@ -11,6 +11,25 @@ sits in the highest-recency slot - the very end of the current message. Burying 
 name/date/language directive at the start lets the model forget it. So the block -
 user, date, web-app language, and the load-bearing rule "answer in the language of
 THIS message" - is appended last (see ``build_user_suffix``).
+
+Reply language (``detect_prompt_language_scored``), deterministic, fr vs en only.
+Keep the orchestrator's ``_detect_lang`` fallback and the dev-harness port
+(dev-harness/mock/live/lang.mjs) in sync with this algorithm:
+  1. Lowercase, fold typographic apostrophes to "'", tokenize into runs of latin
+     letters (accented included) and apostrophes; digits/hyphens/punctuation split.
+  2. Each token adds evidence: a French elision prefix (l' d' j' c' n' s' m' t' qu'
+     jusqu' lorsqu' puisqu') = +1 fr then the remainder is scored as a word; an
+     English "n't" = +1 en; an English "'s/'re/'ve/'ll/'d/'m" = +1 en then the head
+     is scored as a word.
+  3. A word in the shared business-noun list (revenue/revenu, client, budget, total,
+     phase, ACTUALS, ...) scores NOTHING. Otherwise, first match wins: French
+     function word +1 fr; English function word +1 en; French diacritic +1 fr; for
+     5+ letters, a suffix cue +0.5 (-ement -eur -eux -ais -ez -aux -ique = fr,
+     -ing -ed -ly -ness -ful = en). Words shared by both languages are in no list.
+  4. confidence = min(1, top) * (0.5 + 0.5 * margin / total), 0 on a tie or no
+     evidence. ``detect_prompt_language`` keeps the majority language when the
+     confidence is > 0.5 (strict majority AND at least one full point), else
+     returns the default (the web-app language): "42", "ok", "revenue 2025 EMEA".
 """
 import json
 import math
@@ -47,48 +66,160 @@ def resolve_effective_mode(requested, supports_modes):
     return requested if requested in MODEL_MODES else "smart"
 
 
-# Lightweight, deterministic language guess of a RAW user message. Ported into the
-# 3.9 backend (stdlib-only) so language is computed ONCE, on the clean message
-# (before the English date stamp can contaminate the heuristic), and handed to the
-# agent as an authoritative ⟦owi:lang=…⟧ token + an end-of-prompt imperative. Mirror
-# of the agent's own _detect_lang; kept in sync (used only for the reply language).
-_FR_ACCENT_RE = re.compile(r"[éèêàùçâîôœ]")
-# Whole-word markers (matched on word boundaries, NOT as substrings) so e.g. the FR
-# "revenu" never matches inside the EN "revenue", and "add" never matches "address".
-_FR_WORDS = (
-    "le", "la", "les", "des", "du", "une", "un", "quel", "quels", "quelle",
-    "quelles", "combien", "revenu", "revenus", "évolution", "evolution",
-    "client", "clients", "montre", "montrez", "donne", "donnez", "pour",
-    "bonjour", "salut", "merci", "ajoute", "ajouter", "rajoute", "rajouter",
-    "explique", "expliquer", "affiche", "afficher",
-)
-_EN_WORDS = (
-    "the", "a", "an", "of", "what", "how", "show", "give", "revenue", "which",
-    "trend", "compare", "hello", "please", "thanks", "add", "explain", "display",
-)
-_FR_RE = re.compile(r"\b(?:" + "|".join(_FR_WORDS) + r")\b")
-_EN_RE = re.compile(r"\b(?:" + "|".join(_EN_WORDS) + r")\b")
+# Deterministic reply-language scorer of a RAW user message (stdlib only). Computed
+# ONCE by the backend, on the clean message (before the English date stamp could
+# contaminate it), and handed to the agent as an authoritative ⟦owi:lang=…⟧ token +
+# an end-of-prompt imperative. The algorithm is documented in the module docstring;
+# the dev-harness port (dev-harness/mock/live/lang.mjs) uses the SAME word lists and
+# its node test asserts the parity, so edit both together.
+
+# Tokens: runs of latin letters (accented included) and apostrophes, on the
+# lowercased message with typographic apostrophes folded to "'". Digits, hyphens and
+# punctuation split tokens ("montre-moi" -> "montre", "moi").
+_TOKEN_RE = re.compile(r"[a-zà-öø-ÿœæ']+")
+_APOSTROPHES_RE = re.compile(r"[’‘`´]")
+# French-only diacritics: a token carrying one is French evidence (weight 1).
+_FR_ACCENT_RE = re.compile(r"[àâæçèéêëîïôœùûüÿ]")
+# French elision ("l'", "d'", "qu'", ...) at the start of a token: French evidence,
+# and the remainder is scored as a word of its own ("l'évolution" -> "évolution").
+_FR_ELISION_RE = re.compile(r"^(?:l|d|j|c|n|s|m|t|qu|jusqu|lorsqu|puisqu)'(?=[a-zà-ÿœ])")
+# English contractions: "n't" (no head scoring: "can't" -> "ca" would read French)
+# and "'s/'re/'ve/'ll/'d/'m" (the head is scored: "what's" -> "what").
+_EN_NEG_RE = re.compile(r"n't$")
+_EN_CONTRACTION_RE = re.compile(r"'(?:s|re|ve|ll|d|m)$")
+
+# Function words (articles, pronouns, prepositions, conjunctions, auxiliaries, common
+# request verbs, question words, politeness, calendar words). Weight 1 each. Words
+# that exist in BOTH languages (a, an, as, but, car, dont, me, non, on, or, plus, son,
+# per, via, compare, ok) are deliberately in neither list.
+_FR_WORDS = frozenset("""
+le la les un une des du de au aux ce cet cette ces ça ca ceci cela
+mon ma mes ton ta tes sa ses notre nos votre vos leur leurs
+je tu il elle ils elles nous vous moi toi lui eux se
+qui que quoi quel quelle quels quelles lequel laquelle où ou
+et mais donc ni si pour par avec sans sous sur dans chez entre vers depuis
+pendant avant après apres selon contre comme
+est sont suis es sommes êtes etes était etait étaient etaient été ete être etre
+ai avons avez ont avoir avait aurait sera serait
+fait faire fais faites peux peut pouvez pourrais pourriez pourrait
+veux veut voulez voudrais souhaite souhaiterais dois doit devrait faut
+montre montrez montrer donne donnez donner affiche affichez afficher
+ajoute ajoutez ajouter rajoute rajoutez rajouter explique expliquez expliquer
+comparez comparer liste lister analyser calcule calculer refais
+combien comment pourquoi quand
+merci bonjour bonsoir salut svp stp oui
+ne pas moins très tres bien aussi encore déjà deja
+tous toutes tout toute chaque quelques autre autres voici voilà voila
+aujourd peu beaucoup trop mois année annee années annees semaine trimestre jour jours
+""".split())
+_EN_WORDS = frozenset("""
+the of and to in is are was were be been being am
+do does did done doing have has had having
+i you he she it we they them us my your his her its our their
+this that these those there here
+what which who whom whose why how when where
+can could would should will shall may might must
+please thanks thank hello hi hey
+with from by at for about into over under between than then
+also just only very all each every some any no not yes
+show give tell make add explain display list get need want see help let
+more most less much many if so up out same other both
+month year week quarter last next previous current
+""".split())
+# Business nouns and loanwords shared by both languages: ZERO weight, and exempt from
+# the suffix cues below (e.g. "reporting" is not English evidence, "management" is
+# not French evidence).
+_NEUTRAL_WORDS = frozenset("""
+revenue revenues revenu revenus client clients budget budgets total totals
+phase phases actuals actual forecast forecasts kpi ytd mtd segment segments
+management investment payment payments department statement document moment
+agreement requirement settlement engagement achievement improvement element
+marketing pricing reporting billing booking consulting planning forecasting
+ranking leasing trading roaming streaming meeting parking holding building
+entrepreneur unique technique boutique critique
+""".split())
+# Suffix cues (weight 0.5, tokens of 5+ letters, after the word lists): a lone cue
+# never decides on its own (see the confidence rule).
+_FR_SUFFIXES = ("ement", "eur", "eux", "ais", "ez", "aux", "ique")
+_EN_SUFFIXES = ("ing", "ed", "ly", "ness", "ful")
+_SUFFIX_MIN_LEN = 5
+_SUFFIX_WEIGHT = 0.5
+# A language is decided only when the confidence is STRICTLY above this threshold.
+LANG_MIN_CONFIDENCE = 0.5
+
+
+def _score_word(word, scores):
+    """Add the evidence of one plain word (no apostrophe) to ``scores``."""
+    if not word or word in _NEUTRAL_WORDS:
+        return
+    if word in _FR_WORDS:
+        scores["fr"] += 1.0
+    elif word in _EN_WORDS:
+        scores["en"] += 1.0
+    elif _FR_ACCENT_RE.search(word):
+        scores["fr"] += 1.0
+    elif len(word) >= _SUFFIX_MIN_LEN:
+        if word.endswith(_FR_SUFFIXES):
+            scores["fr"] += _SUFFIX_WEIGHT
+        elif word.endswith(_EN_SUFFIXES):
+            scores["en"] += _SUFFIX_WEIGHT
+
+
+def _score_token(token, scores):
+    """Add the evidence of one token (apostrophe forms handled) to ``scores``."""
+    token = token.strip("'")
+    if not token:
+        return
+    m = _FR_ELISION_RE.match(token)
+    if m:
+        scores["fr"] += 1.0
+        _score_token(token[m.end():], scores)
+        return
+    if _EN_NEG_RE.search(token):
+        scores["en"] += 1.0
+        return
+    m = _EN_CONTRACTION_RE.search(token)
+    if m:
+        scores["en"] += 1.0
+        _score_word(token[:m.start()], scores)
+        return
+    # Any other apostrophe form: score each side as a plain word.
+    for part in token.split("'"):
+        _score_word(part, scores)
+
+
+def detect_prompt_language_scored(message):
+    """``(lang, confidence)`` of a user message: lang in ("fr", "en"), confidence 0..1.
+
+    confidence = min(1, top) * (0.5 + 0.5 * margin / total), 0 on a tie or no
+    evidence. It exceeds LANG_MIN_CONFIDENCE exactly when one language has a strict
+    majority AND at least one full point of evidence (one function word, accent,
+    elision or contraction), so the majority language of a mixed sentence wins.
+    On a tie / no evidence the returned lang is "fr" with confidence 0.
+    """
+    scores = {"fr": 0.0, "en": 0.0}
+    text = _APOSTROPHES_RE.sub("'", (message or "").lower())
+    for token in _TOKEN_RE.findall(text):
+        _score_token(token, scores)
+    fr, en = scores["fr"], scores["en"]
+    total = fr + en
+    if total <= 0 or fr == en:
+        return "fr", 0.0
+    top = max(fr, en)
+    confidence = min(1.0, top) * (0.5 + 0.5 * abs(fr - en) / total)
+    return ("fr" if fr > en else "en"), confidence
 
 
 def detect_prompt_language(message, default="fr"):
-    """Best-effort language of a user message ("fr" / "en").
+    """Reply language of a user message ("fr" / "en").
 
-    Run on the RAW current message (no date prefix). Word-boundary matching avoids
-    cross-language substring collisions (revenu/revenue, add/address). Falls back to
-    ``default`` (the web-app language when known) for a neutral message like "42".
+    Run on the RAW current message (no date prefix). Falls back to ``default`` (the
+    web-app language when known) when the scorer is not confident: a neutral or too
+    short message ("42", "ok", "revenue 2025 EMEA") or a tie.
     """
-    t = (message or "").lower()
-    if not t.strip():
-        return default if default in _LANG_LABEL else "fr"
-    if _FR_ACCENT_RE.search(t):
-        return "fr"
-    fr = len(_FR_RE.findall(t))
-    en = len(_EN_RE.findall(t))
-    if en > fr:
-        return "en"
-    if fr > en:
-        return "fr"
-    return default if default in _LANG_LABEL else "fr"
+    fallback = default if default in _LANG_LABEL else "fr"
+    lang, confidence = detect_prompt_language_scored(message)
+    return lang if confidence > LANG_MIN_CONFIDENCE else fallback
 
 
 def build_user_suffix(full_name, now_dt, webapp_lang=None, prompt_lang=None, mode=None):
@@ -97,10 +228,11 @@ def build_user_suffix(full_name, now_dt, webapp_lang=None, prompt_lang=None, mod
     Placed in the highest-recency slot so even a small model honors it. Carries who
     is asking, the date, the web-app's configured language and - the load-bearing
     rule - the language of THIS message, which the agent must answer in (it always
-    wins over earlier turns and over the web-app language). The control tokens
-    ``⟦owi:mode=…⟧`` / ``⟦owi:lang=…⟧`` are machine-only: the agent parses then
-    STRIPS them, so they never reach the model as visible text, while the
-    human-readable language imperative stays as the final line of the turn.
+    wins over earlier turns and over the web-app language) for the chat reply AND
+    every tool argument. The control tokens ``⟦owi:mode=…⟧`` / ``⟦owi:lang=…⟧`` are
+    machine-only: the agent parses then STRIPS them, so they never reach the model
+    as visible text, while the human-readable language imperative stays as the
+    final line of the turn. Mirrored verbatim by dev-harness/mock/live/lang.mjs.
     """
     name = full_name or "Unknown user"
     date = now_dt.strftime(_DATE_FMT)
@@ -119,10 +251,15 @@ def build_user_suffix(full_name, now_dt, webapp_lang=None, prompt_lang=None, mod
         head += " " + tokens          # inline so stripping leaves the bracket line clean
     parts = [head]
     if prompt_label:
+        if webapp_label and webapp_label != prompt_label:
+            webapp_rule = "The web-app language ({0}) is NOT the reply language.".format(webapp_label)
+        else:
+            webapp_rule = "The web-app language never sets the reply language."
         parts.append(
-            "IMPORTANT - reply in {plabel}: the SAME language as my message above. "
-            "The language of my current message ALWAYS takes priority over earlier "
-            "turns and over the web-app language.".format(plabel=prompt_label))
+            "IMPORTANT - reply in {p}, the language of my message above: write EVERYTHING "
+            "in {p}, the chat reply AND every tool argument (plan steps, widget titles, "
+            "subtitles, texts, scope). {w} This rule takes priority over earlier "
+            "turns.".format(p=prompt_label, w=webapp_rule))
     return "\n".join(parts)
 
 
@@ -307,6 +444,83 @@ def build_prior_data_block(prior_results):
     lines.append(" Prefer recall_prior_result over a specialist when these "
                  "already answer the follow-up.]")
     return "\n".join(lines) + token
+
+
+# --- Studio continuity (the V2 Studio the user sees, continued or not) --------
+# A short visible [CURRENT STUDIO] description of the base workspace (validated
+# server side by the worker: same user, same session, not running) + a MACHINE
+# token (⟦owi:studio=…⟧) carrying only the widget ids, parsed and stripped by the
+# orchestrator. No row, no comment, no sql_id and NEVER the base exchange id: the
+# worker keeps that id locally, so the agent can never point at another exchange.
+STUDIO_BLOCK_MAX_CHARS = 1800
+STUDIO_TOKEN_MAX_CHARS = 600
+STUDIO_SCOPE_CHARS = 200
+STUDIO_TITLE_CHARS = 80
+STUDIO_MAX_WIDGETS = 12
+_STUDIO_TITLE_LADDER = (STUDIO_TITLE_CHARS, 40, 20)
+_STUDIO_HEADER = ("\n\n[CURRENT STUDIO - the dashboard the user sees now, built earlier "
+                  "in THIS conversation from real queries]")
+
+
+def _studio_clean(value, cap):
+    """One-line, glyph-safe projection of an agent-written string (bounded)."""
+    text = _prior_clean(value, 4 * cap)
+    text = " ".join(text.replace('"', "'").split())
+    return text[:cap]
+
+
+def _studio_widget_phrase(widget, title_cap):
+    kind = widget.get("kind") or "?"
+    parts = [widget.get("id") or "?", kind]
+    if kind == "chart":
+        ctype = (widget.get("chart") or {}).get("type")
+        if ctype:
+            parts.append(str(ctype))
+    if kind == "text":
+        parts.append(widget.get("role") or "section")
+    elif widget.get("size"):
+        parts.append(str(widget["size"]))
+    phrase = " ".join(parts)
+    title = _studio_clean(widget.get("title"), title_cap) if title_cap else ""
+    return phrase + (' "%s"' % title if title else "")
+
+
+def build_studio_block(doc):
+    """The visible [CURRENT STUDIO] block + the ⟦owi:studio=…⟧ token, or '' when
+    the document carries no widget. Pure. HARD bound STUDIO_BLOCK_MAX_CHARS on the
+    visible part: titles shrink (80 -> 40 -> 20 chars), then the widget line is
+    hard-truncated. The token lists every widget id (<= STUDIO_TOKEN_MAX_CHARS)."""
+    if not isinstance(doc, dict):
+        return ""
+    widgets = [w for w in doc.get("widgets") or []
+               if isinstance(w, dict) and isinstance(w.get("id"), str)][:STUDIO_MAX_WIDGETS]
+    if not widgets:
+        return ""
+    scope = next((w for w in widgets if w.get("kind") == "text"
+                  and w.get("role") == "scope"), None)
+    scope_text = _studio_clean((scope or {}).get("text"), STUDIO_SCOPE_CHARS)
+    used = len(widgets)
+    capacity = "Capacity: %d of %d used, %d free." % (
+        used, STUDIO_MAX_WIDGETS, max(0, STUDIO_MAX_WIDGETS - used))
+    head = _STUDIO_HEADER + ("\nScope: " + scope_text if scope_text else "")
+    tail = "\n" + capacity
+    visible = ""
+    for title_cap in _STUDIO_TITLE_LADDER:
+        line = "\nWidgets (board order): " + " | ".join(
+            _studio_widget_phrase(w, title_cap) for w in widgets)
+        visible = head + line + tail
+        if len(visible) <= STUDIO_BLOCK_MAX_CHARS:
+            break
+    if len(visible) > STUDIO_BLOCK_MAX_CHARS:
+        room = STUDIO_BLOCK_MAX_CHARS - len(head) - len(tail) - 3
+        visible = head + line[:max(0, room)] + "..." + tail
+    ids = [w["id"] for w in widgets]
+    token = ("⟦owi:studio=" +
+             json.dumps({"ids": ids, "n": len(ids)}, ensure_ascii=False,
+                        separators=(",", ":")) + "⟧")
+    if len(token) > STUDIO_TOKEN_MAX_CHARS:
+        return ""
+    return visible + token
 
 
 # Screen-awareness caps (bounded so the block can never bloat the prompt).

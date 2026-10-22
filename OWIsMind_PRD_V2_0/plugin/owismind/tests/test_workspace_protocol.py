@@ -121,5 +121,101 @@ class NormalizeRobustnessTests(unittest.TestCase):
             self.assertIsNone(p.sql_id(bad))
 
 
+
+class LayoutHintTests(unittest.TestCase):
+    """``size`` (chart / table) and ``role`` (text) are whitelisted layout hints:
+    kept when valid on the right kind, silently dropped otherwise."""
+
+    BASE = {"v": 1, "op": "widget.add", "seq": 1, "id": "w1", "title": "T"}
+    CHART = dict(BASE, kind="chart", sql_id="s1q1",
+                 chart={"type": "line", "x": "month", "y": ["revenue"]})
+    TABLE = dict(BASE, kind="table", sql_id="s1q1")
+    KPI = dict(BASE, kind="kpi", sql_id="s1q1", kpi={"label": "CA", "value": "revenue"})
+    TEXT = dict(BASE, kind="text", text="Scope of the analysis.")
+
+    def test_contract_exposes_the_enums(self):
+        self.assertEqual(p.ENUMS["widget_sizes"], ("normal", "wide"))
+        self.assertEqual(p.ENUMS["text_roles"], ("section", "scope"))
+
+    def test_size_kept_on_chart_and_table(self):
+        for raw in (self.CHART, self.TABLE):
+            for size in p.WIDGET_SIZES:
+                with self.subTest(kind=raw["kind"], size=size):
+                    self.assertEqual(p.normalize_op(dict(raw, size=size))["size"], size)
+
+    def test_size_dropped_on_kpi_and_text_or_when_invalid(self):
+        for raw in (self.KPI, self.TEXT):
+            self.assertNotIn("size", p.normalize_op(dict(raw, size="wide")))
+        for bad in ("WIDE", "full", "", None, 2, ["wide"]):
+            with self.subTest(size=bad):
+                event = p.normalize_op(dict(self.CHART, size=bad))
+                self.assertIsNotNone(event)
+                self.assertNotIn("size", event)
+
+    def test_role_kept_on_text_only(self):
+        for role in p.TEXT_ROLES:
+            self.assertEqual(p.normalize_op(dict(self.TEXT, role=role))["role"], role)
+        for raw in (self.CHART, self.TABLE, self.KPI):
+            self.assertNotIn("role", p.normalize_op(dict(raw, role="scope")))
+        for bad in ("Scope", "header", None, 1):
+            with self.subTest(role=bad):
+                event = p.normalize_op(dict(self.TEXT, role=bad))
+                self.assertIsNotNone(event)
+                self.assertNotIn("role", event)
+
+    def test_absent_hints_never_defaulted(self):
+        for raw in (self.CHART, self.TABLE, self.KPI, self.TEXT):
+            event = p.normalize_op(raw)
+            self.assertNotIn("size", event)
+            self.assertNotIn("role", event)
+
+    def test_hints_idempotent(self):
+        for raw in (dict(self.CHART, size="wide"), dict(self.TEXT, role="scope")):
+            event = p.normalize_op(raw)
+            self.assertEqual(p.normalize_op(event), event)
+
+
+
+class StudioContinuityProtocolTests(unittest.TestCase):
+    """studio.continue / widget.remove / replaces (agent ops) and studio.carry
+    (backend only), pinned by the shared continuity fixture."""
+
+    def test_shared_normalize_cases(self):
+        fx = _load(os.path.join(FIXTURES, "workspace_continuity_cases.json"))
+        for case in fx["normalize_cases"]:
+            with self.subTest(case=case["name"]):
+                self.assertEqual(p.normalize_op(case["input"], case["default_ts"]),
+                                 case["expected"])
+                if case["expected"] is not None:
+                    self.assertEqual(p.normalize_op(case["expected"]), case["expected"])
+
+    def test_contract_declares_the_new_ops(self):
+        contract = _load(os.path.join(CONTRACTS, "workspace_protocol.v1.json"))
+        for op in ("studio.continue", "widget.remove", "studio.carry"):
+            self.assertIn(op, contract["events"])
+            self.assertIn(op, contract["$defs"]["envelope"]["properties"]["op"]["enum"])
+        self.assertIn("replaces", contract["events"]["widget.add"]["properties"])
+        self.assertEqual(contract["$defs"]["exchangeId"]["pattern"], p.EXCHANGE_ID_PATTERN)
+
+    def test_carry_only_through_its_own_gate(self):
+        carry = {"v": 1, "op": "studio.carry", "seq": 3, "base_exchange_id": "ex-1",
+                 "widgets": [{"id": "w1", "kind": "text", "title": "T", "text": "x",
+                              "origin": "ex-1", "step_id": "p1", "ts": 2}]}
+        self.assertIsNone(p.normalize_op(carry))
+        norm = p.normalize_carry(carry, 1.0)
+        self.assertEqual(norm["widgets"], [{"id": "w1", "kind": "text", "title": "T",
+                                            "text": "x", "origin": "ex-1"}])
+        self.assertEqual(p.normalize_carry(norm), norm)                 # idempotent
+        self.assertIsNone(p.normalize_carry(dict(carry, base_exchange_id="bad id")))
+        self.assertIsNone(p.normalize_carry(dict(carry, op="widget.add")))
+        many = dict(carry, widgets=[dict(carry["widgets"][0], id="w%d" % i)
+                                    for i in range(30)])
+        self.assertEqual(len(p.normalize_carry(many)["widgets"]), p.MAX_WIDGETS)
+
+    def test_exchange_id_pattern(self):
+        self.assertEqual(p.exchange_id("ex_A-9"), "ex_A-9")
+        for bad in ("", "a b", "x" * 129, "ex\n", None, 5, "é"):
+            self.assertIsNone(p.exchange_id(bad), bad)
+
 if __name__ == "__main__":
     unittest.main()

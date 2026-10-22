@@ -3,3 +3,4 @@
 - [Dark override blind spot](reference_dark_theme_override_blind_spot.md) - styling passes fix the light rule and miss the `:global(body[data-theme="dark"] ...)` override; grep data-theme in every changed file.
 - [Recurring charter leftovers](reference_recurring_charter_leftovers.md) - 4 greps to run first: orange field-focus, pill-ified gauges, edited Tabs.vue, hex in dark override.
 - [Pieges de charte recurrents](recurring-charter-traps.md) - orange AA petit texte, hover inverse en dark, jumeaux SourceTable/EvidenceTable, th en flex, .active:hover oublie sur --surface-press, doc premium qui derive du code
+- [V2 charter precedence](v2-charter-precedence-radius-regression.md) - V2 radii/no top rule/--on-orange override V1.3; devs re-square V2 radius tokens to 0, compare with siblings

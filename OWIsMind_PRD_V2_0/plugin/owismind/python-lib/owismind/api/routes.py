@@ -16,7 +16,8 @@ Routes:
   - ``/chat/feedback`` : persist a 👍/👎 (+ optional reasons/comment) on one's own message.
   - ``/conversations`` : names-only, keyset-paginated conversation list (sidebar).
   - ``/conversation``  : all messages of ONE session, fetched lazily on click (each row
-                         flags ``has_workspace``).
+                         flags ``has_workspace`` = a Studio, and carries its stored
+                         next steps as ``suggestions`` when there are some).
   - ``/workspace``     : the V2.0 workspace of ONE exchange (plan, notes, widgets,
                          provenance) joined by sql_id with its captured SQL (read-only).
   - ``/evidence/*``    : Evidence Studio - meta / rows / distinct (owner-scoped, read-only, project datasets).
@@ -444,19 +445,23 @@ _SCREEN_TABS = ("evidence", "chart", "table", "kpi", "sources")
 
 def _sanitize_screen_context(raw):
     """Tiny bounded view of what the user is looking at, or None when there is
-    nothing to describe. Two independent parts, either of which is sufficient:
+    nothing to describe. Three independent parts, any of which is sufficient:
 
       - the Evidence panel OPEN on an exchange (``open`` + ``exchange_id`` + tab):
         the artifacts are read OWNER-SCOPED in the worker, so a forged exchange_id
         can only ever reveal the caller's own data;
       - a ``source_state`` (the filters/computed figures the user shaped and chose
         to share) sanitized by ``context.sanitize_source_state`` - carried even when
-        the Evidence panel is closed (the Source data explorer on the home screen).
+        the Evidence panel is closed (the Source data explorer on the home screen);
+      - ``studio_exchange_id``: the exchange whose V2 Studio is shown (a POINTER
+        only: the worker validates it owner-scoped, same session, not running,
+        before describing it to the orchestrator). Never persisted.
 
     Untrusted input; every field is whitelisted/bounded. Returns None only when
-    NEITHER a valid open+exchange part NOR a source_state survives."""
+    none of the three parts survives."""
     raw = raw if isinstance(raw, dict) else {}
     source_state = context.sanitize_source_state(raw.get("source_state"))
+    studio_exchange_id = workspace_protocol.exchange_id(raw.get("studio_exchange_id"))
 
     open_part = None
     if raw.get("open"):
@@ -469,11 +474,13 @@ def _sanitize_screen_context(raw):
                 "active_tab": tab if tab in _SCREEN_TABS else None,
             }
 
-    if open_part is None and source_state is None:
+    if open_part is None and source_state is None and studio_exchange_id is None:
         return None
     out = open_part if open_part is not None else {"open": False}
     if source_state is not None:
         out["source_state"] = source_state
+    if studio_exchange_id is not None:
+        out["studio_exchange_id"] = studio_exchange_id
     return out
 
 
@@ -659,6 +666,9 @@ def chat_start(identity):
             mode=mode,
             engine=engine,
             session_id=session_id,
+            # Studio continuity rides the same opt-in as the prior recall: only the
+            # token-aware orchestrator on the legacy engine parses ⟦owi:studio⟧.
+            studio_context_enabled=prior_recall_enabled,
         )
     except stream_manager.CapacityError:
         logger.warning("/chat/start - concurrency cap reached, rejected")
@@ -834,14 +844,23 @@ def conversation(identity):
         logger.exception("/conversation - load failed")
         return jsonify({"status": "error", "error": "storage_unavailable"}), 500
 
-    # V2.0: flag the exchanges that carry a workspace (one bounded, owner-scoped
-    # primary-key lookup for the whole session, never N calls). Best-effort: a
-    # failure reads as "no workspace" and the conversation still loads.
-    with_workspace = workspaces_storage.workspace_exchange_ids(
+    # V2.0: flag the exchanges whose workspace offers a Studio (plan or widgets) and
+    # attach their stored next steps (suggest.set), from ONE bounded, owner-scoped
+    # primary-key lookup for the whole session, never N calls. A document holding
+    # only next steps is ``has_workspace: false`` (no Studio) but still replays its
+    # chips. Best-effort: a failure reads as "no workspace" and the conversation
+    # still loads.
+    flags = workspaces_storage.workspace_flags(
         identity["user_id"], [r.get("exchange_id") for r in rows]
     )
+    with_workspace = set()
     for r in rows:
-        r["has_workspace"] = r.get("exchange_id") in with_workspace
+        flag = flags.get(r.get("exchange_id")) or {}
+        r["has_workspace"] = bool(flag.get("studio"))
+        if r["has_workspace"]:
+            with_workspace.add(r.get("exchange_id"))
+        if flag.get("suggestions"):
+            r["suggestions"] = flag["suggestions"]
 
     logger.info(
         "/conversation - user_id=%s session_id=%s returned %d rows (%d with workspace)",
@@ -868,6 +887,9 @@ def workspace(identity):
     is re-run (the full result pages stay on /evidence/result-rows). Owner-scoped:
     an unknown exchange, someone else's, or one without a workspace is a 404
     ``workspace_not_found`` (the front falls back to /evidence/meta). Read-only.
+    Studio continuity: ``origins: {origin_exchange_id: {resolved, provenance}}``
+    serves the CARRIED widgets (resolved against their origin exchange, read
+    owner-scoped; a missing origin = ``orphan``); ``resolved`` stays THIS exchange.
     """
     try:
         exchange_id = validate_required_exchange_id(request.args.get("exchange_id"))
@@ -880,10 +902,20 @@ def workspace(identity):
         return jsonify({"status": "error", "error": "workspace_not_found"}), 404
 
     items = workspaces_storage.read_exchange_sql_items(identity["user_id"], exchange_id)
-    resolved, widgets_data = workspace_resolve.build_resolution(
+    # Studio continuity: carried widgets resolve against their ORIGIN exchange (two
+    # extra owner-scoped PK IN reads, only when such widgets exist, <= 12 ids).
+    origin_ids = workspace_resolve.origin_exchange_ids(state)
+    origin_items, origin_prov = {}, {}
+    if origin_ids:
+        origin_items = workspaces_storage.read_exchanges_sql_items(
+            identity["user_id"], origin_ids)
+        origin_prov = workspaces_storage.read_workspaces(identity["user_id"], origin_ids)
+    resolved, widgets_data, origins = workspace_resolve.resolve_workspace(
         state, items,
         explain_fn=evidence_service.safe_explain,
         result_block_fn=evidence_service.build_result_block,
+        origin_items=origin_items,
+        origin_prov=origin_prov,
     )
     logger.info(
         "/workspace - user_id=%s exchange_id=%s status=%s widgets=%d resolved=%d",
@@ -896,6 +928,7 @@ def workspace(identity):
         "events": None,
         "resolved": resolved,
         "widgets_data": widgets_data,
+        "origins": origins,
     })
 
 
@@ -1018,7 +1051,8 @@ def _attach_query_widgets(meta, user_id, exchange_id, artifacts):
         workspace_doc = workspaces_storage.read_workspace(user_id, exchange_id)
         if workspace_doc:
             for w in workspace_doc.get("widgets") or []:
-                if w.get("sql_id"):
+                # A carried widget's sql_id belongs to its ORIGIN exchange.
+                if w.get("sql_id") and not w.get("origin"):
                     by_sql.setdefault(w["sql_id"], []).append({
                         "id": w["id"], "kind": w["kind"], "title": w.get("title", ""),
                         "source": "workspace"})

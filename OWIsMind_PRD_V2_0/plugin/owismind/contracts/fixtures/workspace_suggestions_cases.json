@@ -1,0 +1,792 @@
+{
+  "name": "workspace_suggestions_cases",
+  "description": "suggest.set ('Go further' next steps) shared by the backend (workspace/protocol.py + reducer.py) and the frontend (composables/workspaceModel.js). normalize_cases: normalize(input, default_ts) deep-equals expected (null = op dropped); an expected event re-normalizes to itself. reducer_cases: fold 'events' from the empty state; 'expected' is the full reduced state (deep equality), 'expected_suggestions' its suggestions (null = key ABSENT, the only 'no suggestions' form; read state.suggestions || []); 'persisted' = the backend writes the row (reducer.is_empty is false); 'opens_studio' = the state has a plan, a note or a widget (suggestions alone never open the Studio).",
+  "limits": {
+    "suggestions_max_items": 3,
+    "suggestion_min_chars": 8,
+    "suggestion_max_chars": 120
+  },
+  "normalize_cases": [
+    {
+      "name": "valid_two_items",
+      "description": "Nominal op: kept as is, the agent ts wins over default_ts.",
+      "input": {
+        "v": 1,
+        "op": "suggest.set",
+        "seq": 5,
+        "items": [
+          "Comparer 2026 au budget mois par mois",
+          "Voir la répartition par offre"
+        ],
+        "ts": 3.5
+      },
+      "default_ts": 9.0,
+      "expected": {
+        "type": "workspace",
+        "v": 1,
+        "op": "suggest.set",
+        "seq": 5,
+        "ts": 3.5,
+        "items": [
+          "Comparer 2026 au budget mois par mois",
+          "Voir la répartition par offre"
+        ]
+      }
+    },
+    {
+      "name": "trimmed_and_ts_stamped",
+      "description": "Items are stripped; a missing ts is stamped with default_ts.",
+      "input": {
+        "v": 1,
+        "op": "suggest.set",
+        "seq": 1,
+        "items": [
+          "  Voir la répartition par offre  \n"
+        ]
+      },
+      "default_ts": 2.0,
+      "expected": {
+        "type": "workspace",
+        "v": 1,
+        "op": "suggest.set",
+        "seq": 1,
+        "ts": 2.0,
+        "items": [
+          "Voir la répartition par offre"
+        ]
+      }
+    },
+    {
+      "name": "too_short_item_dropped_individually",
+      "description": "An item under 8 chars is dropped, the others stay.",
+      "input": {
+        "v": 1,
+        "op": "suggest.set",
+        "seq": 2,
+        "items": [
+          "court",
+          "Comparer 2026 au budget mois par mois"
+        ]
+      },
+      "default_ts": 1.0,
+      "expected": {
+        "type": "workspace",
+        "v": 1,
+        "op": "suggest.set",
+        "seq": 2,
+        "ts": 1.0,
+        "items": [
+          "Comparer 2026 au budget mois par mois"
+        ]
+      }
+    },
+    {
+      "name": "length_bounds_inclusive",
+      "description": "8 and 120 chars are kept; 7 and 121 chars are dropped (never truncated). Length is measured after strip.",
+      "input": {
+        "v": 1,
+        "op": "suggest.set",
+        "seq": 3,
+        "items": [
+          "Parmois",
+          "Par pays",
+          "Comparer xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxy",
+          "Comparer xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "   Top dix   "
+        ]
+      },
+      "default_ts": 1.0,
+      "expected": {
+        "type": "workspace",
+        "v": 1,
+        "op": "suggest.set",
+        "seq": 3,
+        "ts": 1.0,
+        "items": [
+          "Par pays",
+          "Comparer xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        ]
+      }
+    },
+    {
+      "name": "length_counts_code_points",
+      "description": "Length = Unicode code points (JS: [...s].length): an astral char counts 1, so this 120-code-point item (121 UTF-16 units) is kept.",
+      "input": {
+        "v": 1,
+        "op": "suggest.set",
+        "seq": 4,
+        "items": [
+          "𝟏 Voir le top des offres zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+        ]
+      },
+      "default_ts": 1.0,
+      "expected": {
+        "type": "workspace",
+        "v": 1,
+        "op": "suggest.set",
+        "seq": 4,
+        "ts": 1.0,
+        "items": [
+          "𝟏 Voir le top des offres zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+        ]
+      }
+    },
+    {
+      "name": "dedupe_case_and_whitespace_insensitive",
+      "description": "Duplicates (lowercase + whitespace runs collapsed) are removed, first occurrence kept as stripped.",
+      "input": {
+        "v": 1,
+        "op": "suggest.set",
+        "seq": 6,
+        "items": [
+          "Voir la tendance mensuelle",
+          "  voir LA   tendance\tmensuelle ",
+          "VOIR LA TENDANCE MENSUELLE",
+          "Quels clients ont le plus progressé ?"
+        ]
+      },
+      "default_ts": 1.0,
+      "expected": {
+        "type": "workspace",
+        "v": 1,
+        "op": "suggest.set",
+        "seq": 6,
+        "ts": 1.0,
+        "items": [
+          "Voir la tendance mensuelle",
+          "Quels clients ont le plus progressé ?"
+        ]
+      }
+    },
+    {
+      "name": "more_than_three_keeps_first_three_valid",
+      "description": "Invalid items do not count; the first 3 VALID items are kept.",
+      "input": {
+        "v": 1,
+        "op": "suggest.set",
+        "seq": 7,
+        "items": [
+          "x",
+          "Comparer 2026 au budget mois par mois",
+          "Voir la répartition par offre",
+          "comparer 2026 au budget mois par mois",
+          "Quels clients ont le plus progressé ?",
+          "Voir les tickets ouverts par priorité"
+        ]
+      },
+      "default_ts": 1.0,
+      "expected": {
+        "type": "workspace",
+        "v": 1,
+        "op": "suggest.set",
+        "seq": 7,
+        "ts": 1.0,
+        "items": [
+          "Comparer 2026 au budget mois par mois",
+          "Voir la répartition par offre",
+          "Quels clients ont le plus progressé ?"
+        ]
+      }
+    },
+    {
+      "name": "non_string_items_dropped",
+      "description": "Numbers, null, objects, lists and booleans are dropped individually.",
+      "input": {
+        "v": 1,
+        "op": "suggest.set",
+        "seq": 8,
+        "items": [
+          42,
+          null,
+          {
+            "t": "Voir les tickets ouverts par priorité"
+          },
+          [
+            "Voir les tickets ouverts par priorité"
+          ],
+          true,
+          "Voir les tickets ouverts par priorité"
+        ]
+      },
+      "default_ts": 1.0,
+      "expected": {
+        "type": "workspace",
+        "v": 1,
+        "op": "suggest.set",
+        "seq": 8,
+        "ts": 1.0,
+        "items": [
+          "Voir les tickets ouverts par priorité"
+        ]
+      }
+    },
+    {
+      "name": "unknown_keys_removed",
+      "description": "Keys outside the contract (text, step_id, suggestions) are removed.",
+      "input": {
+        "v": 1,
+        "op": "suggest.set",
+        "seq": 9,
+        "items": [
+          "Comparer 2026 au budget mois par mois"
+        ],
+        "text": "ignored",
+        "step_id": "p1",
+        "suggestions": [
+          "Voir la répartition par offre"
+        ]
+      },
+      "default_ts": 1.0,
+      "expected": {
+        "type": "workspace",
+        "v": 1,
+        "op": "suggest.set",
+        "seq": 9,
+        "ts": 1.0,
+        "items": [
+          "Comparer 2026 au budget mois par mois"
+        ]
+      }
+    },
+    {
+      "name": "all_items_invalid_dropped",
+      "description": "Nothing valid left -> the whole op is dropped.",
+      "input": {
+        "v": 1,
+        "op": "suggest.set",
+        "seq": 10,
+        "items": [
+          "a",
+          "",
+          "   ",
+          7,
+          "Comparer xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxy"
+        ]
+      },
+      "default_ts": 1.0,
+      "expected": null
+    },
+    {
+      "name": "empty_list_dropped",
+      "description": "items: [] -> dropped.",
+      "input": {
+        "v": 1,
+        "op": "suggest.set",
+        "seq": 11,
+        "items": []
+      },
+      "default_ts": 1.0,
+      "expected": null
+    },
+    {
+      "name": "items_not_a_list_dropped",
+      "description": "A bare string is not a list -> dropped.",
+      "input": {
+        "v": 1,
+        "op": "suggest.set",
+        "seq": 12,
+        "items": "Comparer 2026 au budget mois par mois"
+      },
+      "default_ts": 1.0,
+      "expected": null
+    },
+    {
+      "name": "items_missing_dropped",
+      "description": "No items key -> dropped.",
+      "input": {
+        "v": 1,
+        "op": "suggest.set",
+        "seq": 13
+      },
+      "default_ts": 1.0,
+      "expected": null
+    },
+    {
+      "name": "bad_envelope_dropped",
+      "description": "seq 0 -> dropped (envelope rules as every op).",
+      "input": {
+        "v": 1,
+        "op": "suggest.set",
+        "seq": 0,
+        "items": [
+          "Comparer 2026 au budget mois par mois"
+        ]
+      },
+      "default_ts": 1.0,
+      "expected": null
+    }
+  ],
+  "reducer_cases": [
+    {
+      "name": "no_suggestion_key_absent",
+      "description": "No suggest.set -> the key is ABSENT (never []).",
+      "events": [
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "plan.set",
+          "seq": 1,
+          "ts": 0.5,
+          "mission": "M",
+          "origin": "model",
+          "steps": [
+            {
+              "id": "p1",
+              "label": "Step"
+            }
+          ]
+        }
+      ],
+      "expected": {
+        "v": 1,
+        "status": "running",
+        "last_seq": 1,
+        "plan": {
+          "version": 1,
+          "origin": "model",
+          "mission": "M",
+          "steps": [
+            {
+              "id": "p1",
+              "label": "Step",
+              "status": "todo"
+            }
+          ]
+        },
+        "notes": [],
+        "widgets": [],
+        "provenance": {},
+        "summary": {
+          "widget_ids_by_step": {},
+          "sql_ids": []
+        }
+      },
+      "expected_suggestions": null,
+      "persisted": true,
+      "opens_studio": true
+    },
+    {
+      "name": "suggestions_only",
+      "description": "A run whose only op is suggest.set: persisted (backend is_empty false) but it never opens the Studio (no plan, note nor widget).",
+      "events": [
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "suggest.set",
+          "seq": 1,
+          "ts": 2.0,
+          "items": [
+            "Comparer 2026 au budget mois par mois",
+            "Voir la répartition par offre"
+          ]
+        }
+      ],
+      "expected": {
+        "v": 1,
+        "status": "running",
+        "last_seq": 1,
+        "plan": null,
+        "notes": [],
+        "widgets": [],
+        "provenance": {},
+        "suggestions": [
+          "Comparer 2026 au budget mois par mois",
+          "Voir la répartition par offre"
+        ],
+        "summary": {
+          "widget_ids_by_step": {},
+          "sql_ids": []
+        }
+      },
+      "expected_suggestions": [
+        "Comparer 2026 au budget mois par mois",
+        "Voir la répartition par offre"
+      ],
+      "persisted": true,
+      "opens_studio": false
+    },
+    {
+      "name": "last_valid_op_wins",
+      "description": "A later valid op replaces the list entirely.",
+      "events": [
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "suggest.set",
+          "seq": 1,
+          "items": [
+            "Comparer 2026 au budget mois par mois",
+            "Voir la répartition par offre"
+          ]
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "suggest.set",
+          "seq": 2,
+          "items": [
+            "Quels clients ont le plus progressé ?"
+          ]
+        }
+      ],
+      "expected": {
+        "v": 1,
+        "status": "running",
+        "last_seq": 2,
+        "plan": null,
+        "notes": [],
+        "widgets": [],
+        "provenance": {},
+        "suggestions": [
+          "Quels clients ont le plus progressé ?"
+        ],
+        "summary": {
+          "widget_ids_by_step": {},
+          "sql_ids": []
+        }
+      },
+      "expected_suggestions": [
+        "Quels clients ont le plus progressé ?"
+      ],
+      "persisted": true,
+      "opens_studio": false
+    },
+    {
+      "name": "invalid_later_op_keeps_previous",
+      "description": "An invalid op is dropped before the seq check: the list and last_seq are unchanged.",
+      "events": [
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "suggest.set",
+          "seq": 1,
+          "items": [
+            "Comparer 2026 au budget mois par mois"
+          ]
+        },
+        {
+          "v": 1,
+          "op": "suggest.set",
+          "seq": 2,
+          "items": [
+            "short",
+            3
+          ]
+        }
+      ],
+      "expected": {
+        "v": 1,
+        "status": "running",
+        "last_seq": 1,
+        "plan": null,
+        "notes": [],
+        "widgets": [],
+        "provenance": {},
+        "suggestions": [
+          "Comparer 2026 au budget mois par mois"
+        ],
+        "summary": {
+          "widget_ids_by_step": {},
+          "sql_ids": []
+        }
+      },
+      "expected_suggestions": [
+        "Comparer 2026 au budget mois par mois"
+      ],
+      "persisted": true,
+      "opens_studio": false
+    },
+    {
+      "name": "replayed_seq_ignored",
+      "description": "seq <= last_seq is a replay: ignored.",
+      "events": [
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "suggest.set",
+          "seq": 3,
+          "items": [
+            "Comparer 2026 au budget mois par mois"
+          ]
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "suggest.set",
+          "seq": 2,
+          "items": [
+            "Voir la répartition par offre"
+          ]
+        }
+      ],
+      "expected": {
+        "v": 1,
+        "status": "running",
+        "last_seq": 3,
+        "plan": null,
+        "notes": [],
+        "widgets": [],
+        "provenance": {},
+        "suggestions": [
+          "Comparer 2026 au budget mois par mois"
+        ],
+        "summary": {
+          "widget_ids_by_step": {},
+          "sql_ids": []
+        }
+      },
+      "expected_suggestions": [
+        "Comparer 2026 au budget mois par mois"
+      ],
+      "persisted": true,
+      "opens_studio": false
+    },
+    {
+      "name": "raw_op_reduced_with_validation",
+      "description": "The reducer re-normalizes: trim, dedupe and the 3-item cap apply to a raw op too.",
+      "events": [
+        {
+          "v": 1,
+          "op": "suggest.set",
+          "seq": 1,
+          "items": [
+            "  Comparer 2026 au budget mois par mois",
+            "COMPARER 2026 AU BUDGET MOIS PAR MOIS",
+            "x",
+            "Voir la répartition par offre",
+            "Quels clients ont le plus progressé ?",
+            "Voir les tickets ouverts par priorité"
+          ]
+        }
+      ],
+      "expected": {
+        "v": 1,
+        "status": "running",
+        "last_seq": 1,
+        "plan": null,
+        "notes": [],
+        "widgets": [],
+        "provenance": {},
+        "suggestions": [
+          "Comparer 2026 au budget mois par mois",
+          "Voir la répartition par offre",
+          "Quels clients ont le plus progressé ?"
+        ],
+        "summary": {
+          "widget_ids_by_step": {},
+          "sql_ids": []
+        }
+      },
+      "expected_suggestions": [
+        "Comparer 2026 au budget mois par mois",
+        "Voir la répartition par offre",
+        "Quels clients ont le plus progressé ?"
+      ],
+      "persisted": true,
+      "opens_studio": false
+    },
+    {
+      "name": "summary_and_widgets_ignore_suggestions",
+      "description": "Suggestions never enter summary nor widgets.",
+      "events": [
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "plan.set",
+          "seq": 1,
+          "ts": 0.5,
+          "mission": "M",
+          "origin": "model",
+          "steps": [
+            {
+              "id": "p1",
+              "label": "Step"
+            }
+          ]
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "widget.add",
+          "seq": 2,
+          "ts": 1.0,
+          "id": "w1",
+          "step_id": "p1",
+          "kind": "text",
+          "title": "T",
+          "text": "body"
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "suggest.set",
+          "seq": 3,
+          "items": [
+            "Voir les tickets ouverts par priorité"
+          ]
+        }
+      ],
+      "expected": {
+        "v": 1,
+        "status": "running",
+        "last_seq": 3,
+        "plan": {
+          "version": 1,
+          "origin": "model",
+          "mission": "M",
+          "steps": [
+            {
+              "id": "p1",
+              "label": "Step",
+              "status": "todo"
+            }
+          ]
+        },
+        "notes": [],
+        "widgets": [
+          {
+            "id": "w1",
+            "kind": "text",
+            "title": "T",
+            "step_id": "p1",
+            "text": "body",
+            "ts": 1.0
+          }
+        ],
+        "provenance": {},
+        "suggestions": [
+          "Voir les tickets ouverts par priorité"
+        ],
+        "summary": {
+          "widget_ids_by_step": {
+            "p1": [
+              "w1"
+            ]
+          },
+          "sql_ids": []
+        }
+      },
+      "expected_suggestions": [
+        "Voir les tickets ouverts par priorité"
+      ],
+      "persisted": true,
+      "opens_studio": true
+    },
+    {
+      "name": "carry_never_brings_suggestions",
+      "description": "studio.carry projects base_exchange_id + widgets only: a 'suggestions' key on it is dropped.",
+      "events": [
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "studio.carry",
+          "seq": 1,
+          "ts": 0.1,
+          "base_exchange_id": "ex-base",
+          "widgets": [
+            {
+              "id": "wb",
+              "kind": "text",
+              "title": "Base",
+              "text": "x",
+              "origin": "ex-base"
+            }
+          ],
+          "suggestions": [
+            "Voir la répartition par offre"
+          ]
+        }
+      ],
+      "expected": {
+        "v": 1,
+        "status": "running",
+        "last_seq": 1,
+        "plan": null,
+        "notes": [],
+        "widgets": [
+          {
+            "id": "wb",
+            "kind": "text",
+            "title": "Base",
+            "text": "x",
+            "origin": "ex-base"
+          }
+        ],
+        "provenance": {},
+        "base_exchange_id": "ex-base",
+        "summary": {
+          "widget_ids_by_step": {},
+          "sql_ids": []
+        }
+      },
+      "expected_suggestions": null,
+      "persisted": true,
+      "opens_studio": true
+    },
+    {
+      "name": "carry_then_own_suggestions",
+      "description": "After a carry, this run's suggest.set is the only source.",
+      "events": [
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "studio.carry",
+          "seq": 1,
+          "ts": 0.1,
+          "base_exchange_id": "ex-base",
+          "widgets": [
+            {
+              "id": "wb",
+              "kind": "text",
+              "title": "Base",
+              "text": "x",
+              "origin": "ex-base"
+            }
+          ],
+          "suggestions": [
+            "Voir la répartition par offre"
+          ]
+        },
+        {
+          "type": "workspace",
+          "v": 1,
+          "op": "suggest.set",
+          "seq": 2,
+          "items": [
+            "Quels clients ont le plus progressé ?"
+          ]
+        }
+      ],
+      "expected": {
+        "v": 1,
+        "status": "running",
+        "last_seq": 2,
+        "plan": null,
+        "notes": [],
+        "widgets": [
+          {
+            "id": "wb",
+            "kind": "text",
+            "title": "Base",
+            "text": "x",
+            "origin": "ex-base"
+          }
+        ],
+        "provenance": {},
+        "base_exchange_id": "ex-base",
+        "suggestions": [
+          "Quels clients ont le plus progressé ?"
+        ],
+        "summary": {
+          "widget_ids_by_step": {},
+          "sql_ids": []
+        }
+      },
+      "expected_suggestions": [
+        "Quels clients ont le plus progressé ?"
+      ],
+      "persisted": true,
+      "opens_studio": true
+    }
+  ]
+}

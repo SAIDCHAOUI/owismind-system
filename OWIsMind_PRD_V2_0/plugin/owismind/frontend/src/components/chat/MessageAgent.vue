@@ -33,6 +33,7 @@ import { useWorkspaceStore } from '../../stores/workspace.js'
 import { Icon, Menu } from '../ui'
 import FeedbackModal from './FeedbackModal.vue'
 import WorkspaceSummary from './WorkspaceSummary.vue'
+import SuggestionChips from './SuggestionChips.vue'
 
 const props = defineProps({
   turn: { type: Object, required: true },
@@ -174,10 +175,15 @@ function renderItem(item) {
 }
 
 // V2 workspace card: shown when this answer built a workspace (live entry in memory)
-// or the stored conversation says it has one (/conversation `has_workspace`).
-const hasWorkspace = computed(
-  () => !!props.turn.exchange.hasWorkspace || workspace.hasContent(props.turn.exchange.id, props.turn.exchange.uid),
-)
+// or the stored conversation says it has one (/conversation `has_workspace`). A loaded
+// document holding only next steps (suggest.set) has no Studio: no card.
+const hasWorkspace = computed(() => {
+  const ex = props.turn.exchange
+  if (workspace.suggestionsOnly(ex.id, ex.uid)) return false
+  return !!ex.hasWorkspace || workspace.hasContent(ex.id, ex.uid)
+})
+// "Go further" chips: the next steps the agent proposed for THIS answer.
+const nextSteps = computed(() => workspace.suggestionsFor(props.turn.exchange.id, props.turn.exchange.uid))
 
 // Per-message evidence entry point: manual open ALWAYS works (degraded view
 // included) - only the end-of-run auto-open is gated on availability.
@@ -367,7 +373,7 @@ function nextVersion() {
 </script>
 
 <template>
-  <div class="msg agent u-no-shrink">
+  <div class="msg agent u-no-shrink" data-agent-msg>
     <div class="head">
       <span class="ico"><Icon name="sparkle" /></span>
       <span class="author">{{ t('msg.author') }}</span>
@@ -409,7 +415,7 @@ function nextVersion() {
         </template>
       </template>
       <template v-else>
-      <div v-if="steps.length" class="activity" :class="{ collapsed: !activityOpen }">
+      <div v-if="steps.length" class="activity" :class="{ collapsed: !activityOpen }" data-answer-lead>
         <button
           type="button"
           class="act-head"
@@ -440,9 +446,9 @@ function nextVersion() {
       </div>
       <template v-for="item in bodyItems" :key="item.id">
         <!-- Agent text block (sanitized markdown) -->
-        <div v-if="item.kind === 'text'" class="body" v-html="renderItem(item)" />
+        <div v-if="item.kind === 'text'" class="body" data-answer-body v-html="renderItem(item)" />
         <!-- Error surfaced in place (i18n-mapped, never the raw machine code) -->
-        <div v-else-if="item.kind === 'error'" class="body error">- {{ runErrorText(item) }} -</div>
+        <div v-else-if="item.kind === 'error'" class="body error" data-answer-body>- {{ runErrorText(item) }} -</div>
       </template>
       </template>
     </div>
@@ -539,6 +545,9 @@ function nextVersion() {
         </button>
       </span>
     </div>
+
+    <!-- "Go further": the agent's next steps, one click = the next question. -->
+    <SuggestionChips v-if="v.status !== 'running' && nextSteps.length" :items="nextSteps" />
 
     <!-- Adaptive feedback collector (reasons for 👎, comment-only for 👍). Persistence is
          handled by onFeedbackSubmit; the modal switches on the rating it was opened for. -->

@@ -8,7 +8,7 @@
 // The "add filter" popover is a two-step flow (searchable column list -> value
 // picker); the value picker is searchable client-side over the loaded window and,
 // when the server list is truncated, escalates to a server-side search on Enter.
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useSourcesStore } from '../../stores/sources.js'
 import { useClickOutside } from '../../composables/useClickOutside.js'
@@ -86,6 +86,25 @@ const rangeTo = ref('') // 'YYYY-MM'
 // guarded so opening a native month calendar does not self-close. A full-viewport backdrop
 // (template) + Escape are the other two layers.
 useClickOutside(zone, () => { pop.value = null }, { closeOnWindowBlur: true })
+
+// The chips ride the explorer's top line, RIGHT of the search (user ask 2026-10-20), so a
+// popover hanging from a chip's left edge can run past the panel's right edge, where the
+// docked panel clips it. Once the popover is rendered (post flush, before paint) it is
+// measured against the explorer box: if it overflows on the right and fits when hung
+// from the chip's RIGHT edge instead, it flips to that side.
+const popEnd = ref(false)
+watch([pop, () => addStep.value], async () => {
+  popEnd.value = false
+  if (!pop.value || !zone.value) return
+  await nextTick()
+  const el = zone.value && zone.value.querySelector('.src-pop')
+  if (!el || !el.parentElement) return
+  // Layout width (offsetWidth), not the rect: the entry animation scales the card.
+  const w = el.offsetWidth
+  const bound = (zone.value.closest('.src-explorer') || document.documentElement).getBoundingClientRect()
+  const chip = el.parentElement.getBoundingClientRect()
+  popEnd.value = chip.left + w > bound.right && chip.right - w >= bound.left
+}, { flush: 'post' })
 
 const columns = computed(() => sources.columns || [])
 const canAddFilter = computed(() => sources.chips.length < MAX_FILTERS)
@@ -393,12 +412,12 @@ watch(
       v-if="pop" class="src-backdrop"
       @mousedown.prevent @click="pop = null"
     ></div>
-    <!-- ONE inline row (user ask 2026-08-13): the FILTERS label, then the chips, then
-         [+ Add a filter] and [Clear all] which SLIDE RIGHT together as chips land before
-         them. Chips animate in and out (fade + small rise) and every survivor slides to
-         its new slot: a filter is a user decision, it deserves to be seen landing. -->
+    <!-- ONE inline row riding the explorer's top line, right of the search (user ask
+         2026-10-20, no "Filters" label any more): the chips, then [+ Add a filter] and
+         [Clear all] which SLIDE RIGHT together as chips land before them. Chips animate in
+         and out (fade + small rise) and every survivor slides to its new slot: a filter is
+         a user decision, it deserves to be seen landing. -->
     <TransitionGroup tag="div" name="chip" class="src-chips-row">
-      <span key="title" class="src-chips-title">{{ t('src.filters.title') }}</span>
       <span v-for="chip in sources.chips" :key="chip.key" class="src-chip">
         <button class="chip-main" @click="openChipPicker(chip)">
           <span class="col">{{ chip.column }}</span>
@@ -417,7 +436,7 @@ watch(
 
         <!-- Edit an existing filter: a month RANGE picker for a temporal column, the
              distinct-values picker otherwise. -->
-        <div v-if="pop && pop.kind === 'chip' && pop.key === chip.key" class="src-pop">
+        <div v-if="pop && pop.kind === 'chip' && pop.key === chip.key" class="src-pop" :class="{ end: popEnd }">
           <!-- RANGE mode: From / To months + a one-click full-year fill + a link back to
                the exact-values list. -->
           <div v-if="rangeMode" class="pop-range">
@@ -479,7 +498,7 @@ watch(
         <button class="chip-main" @click="openAdd">
           <Icon name="plus" /><span>{{ t('src.filters.add') }}</span>
         </button>
-        <div v-if="pop && pop.kind === 'add'" class="src-pop">
+        <div v-if="pop && pop.kind === 'add'" class="src-pop" :class="{ end: popEnd }">
           <!-- Step 1: search + pick a column -->
           <template v-if="addStep === 'column'">
             <input
@@ -570,18 +589,17 @@ watch(
 
 <style scoped>
 /* Keep the chips block above the table's stacking context so the picker popover
-   is never painted over (mirrors the Evidence chips z-index rule). Square geometry. */
-.src-chips { display: flex; flex-direction: column; gap: var(--s-2); position: relative; z-index: 5; }
+   is never painted over (mirrors the Evidence chips z-index rule). A flex ITEM of the
+   explorer's top line: it takes its natural width beside the search and, once that no
+   longer fits, wraps under it as one block (its own row then wraps chip by chip). */
+.src-chips {
+  display: flex; flex-direction: column; gap: var(--s-2); position: relative; z-index: 5;
+  flex: 0 1 auto; min-width: 0; max-width: 100%;
+}
 /* Invisible full-viewport backdrop while a popover is open. Same stacking context as the
    popover (this block has z-index:5); same z-index as .src-pop but EARLIER in the DOM, so
    the popover paints above it. Transparent - it only intercepts the dismiss click. */
 .src-backdrop { position: fixed; inset: 0; z-index: var(--z-menu); background: transparent; }
-/* Micro-label opening the inline row (charte recipe). */
-.src-chips-title {
-  font-size: 11px; color: var(--text-2); font-weight: var(--fw-heavy);
-  text-transform: uppercase; letter-spacing: var(--tracking-eyebrow);
-  align-self: center; flex: none;
-}
 /* Clear all - a real bordered pill riding right of [+ Add a filter]; hover states the
    consequence (danger ink) without spending any orange. */
 .src-clear {
@@ -671,6 +689,8 @@ watch(
   transform-origin: top left;
   animation: pop-in var(--dur) var(--ease-out) both;
 }
+/* Flipped: hung from the chip's right edge (see popEnd). */
+.src-pop.end { left: auto; right: 0; transform-origin: top right; }
 @keyframes pop-in {
   from { opacity: 0; transform: translateY(-6px) scale(0.98); }
 }
@@ -742,7 +762,7 @@ watch(
 /* Primary action: the single rare orange fill, rounded (premium 2026-08-13). */
 .pop-apply {
   padding: 5px 14px; border-radius: var(--r-pill);
-  background: var(--orange); color: #fff; font-size: var(--fs-xs); font-weight: 500;
+  background: var(--orange); color: var(--on-orange); font-size: var(--fs-xs); font-weight: 500;
   transition: background var(--dur) var(--ease), box-shadow var(--dur) var(--ease),
     transform var(--dur) var(--ease);
 }

@@ -77,6 +77,9 @@ MAX_LIVE_RESULTS_CHARS_PER_RUN = 400_000
 # Workspace operations accepted per run (contract cap). Past it, further ``workspace``
 # events are neither reduced nor relayed live (each one also counts in MAX_LIVE_EVENTS).
 MAX_WORKSPACE_EVENTS = workspace_protocol.MAX_WORKSPACE_EVENTS_PER_RUN
+# Studio continuity fallback: at most this many ancestor workspaces read (PK lookups)
+# to skip the widget-less ones (an answer that only stored its next steps).
+MAX_STUDIO_BASE_PROBES = 4
 
 # Cooperative run-time bounds (checked between streamed chunks):
 #   - the wall-clock deadline: a hard cap so one run cannot occupy a worker thread +
@@ -208,7 +211,7 @@ def _append_event_locked_free(run_id, event):
             state["events"].append(event)
 
 
-def start_run(project_key, agent_id, message, exchange_id, user_id, parent_exchange_id, history_limit, user_suffix, screen_context=None, prior_recall_enabled=False, mode=None, engine=None, session_id=None):
+def start_run(project_key, agent_id, message, exchange_id, user_id, parent_exchange_id, history_limit, user_suffix, screen_context=None, prior_recall_enabled=False, mode=None, engine=None, session_id=None, studio_context_enabled=False):
     """Register a run, spawn its worker thread, and return the new ``run_id``.
 
     ``project_key``/``agent_id`` are the whitelist-resolved target; ``exchange_id``
@@ -222,8 +225,10 @@ def start_run(project_key, agent_id, message, exchange_id, user_id, parent_excha
     ``engine`` selects the run engine, resolved by the route from the ADMIN
     profile (never raw frontend input): 'native' = the in-backend orchestrator
     (agents/native_orchestrator); anything else = the legacy Code Agent path.
-    ``session_id`` (the validated chat session) is kept on the run state only to stamp
-    the end-of-run workspace row; the worker signature is unchanged.
+    ``session_id`` (the validated chat session) is kept on the run state: it stamps
+    the end-of-run workspace row and validates a Studio continuity base.
+    ``studio_context_enabled`` (route-resolved, same opt-in as the prior recall)
+    lets the worker describe the Studio the user sees ([CURRENT STUDIO] + token).
     Raises ``CapacityError`` if the global concurrency cap is already reached.
     """
     now = time.monotonic()
@@ -262,7 +267,7 @@ def start_run(project_key, agent_id, message, exchange_id, user_id, parent_excha
         # possibly-evicted run state.
         args=(run_id, project_key, agent_id, message, exchange_id, now,
               user_id, parent_exchange_id, history_limit, user_suffix, screen_context,
-              prior_recall_enabled, deadline_s, mode, engine),
+              prior_recall_enabled, deadline_s, mode, engine, studio_context_enabled),
         name="owi-agent-run-{}".format(run_id[:8]),
         daemon=True,
     )
@@ -315,6 +320,47 @@ def _build_screen_block(user_id, history, screen_context):
         return ""
 
 
+def _resolve_studio_base(user_id, exchange_id, session_id, screen_context, chain_ids):
+    """``(base_exchange_id, base_doc)`` of the Studio this run may CONTINUE, else None.
+
+    Candidate: the Studio the front says is shown (``studio_exchange_id``, a mere
+    pointer) or, absent, the NEWEST ancestor of the replayed chain that has a
+    workspace WITH widgets (one bounded owner-scoped IN lookup, then at most
+    MAX_STUDIO_BASE_PROBES primary-key reads: a widget-less workspace, e.g. an
+    answer that only stored its next steps, is skipped). Validated server side: the
+    caller owns it (owner-scoped read), it belongs to the SAME chat session, it is
+    not this exchange, it is not still running and it carries widgets. Anything else
+    (forged id, other user / session, running) = no base, silently. Never raises.
+    """
+    try:
+        if not session_id:
+            return None
+        pointer = None
+        if isinstance(screen_context, dict):
+            pointer = screen_context.get("studio_exchange_id")
+        if pointer:
+            candidates = [pointer]
+        elif chain_ids:
+            with_ws = workspaces_storage.workspace_exchange_ids(user_id, chain_ids)
+            candidates = [x for x in chain_ids if x in with_ws][:MAX_STUDIO_BASE_PROBES]
+        else:
+            candidates = []
+        for candidate in candidates:
+            if candidate == exchange_id:
+                return None
+            doc, base_session = workspaces_storage.read_workspace_meta(user_id, candidate)
+            if doc is None or base_session != session_id or doc.get("status") == "running":
+                return None
+            if doc.get("widgets"):
+                return candidate, doc
+            if pointer:
+                return None
+        return None
+    except Exception:
+        logger.exception("studio base resolution failed (non-fatal)")
+        return None
+
+
 def _json_size(value):
     """Serialized size of a JSON-safe value, or None when it cannot be serialized."""
     try:
@@ -349,7 +395,7 @@ def _persist_workspace(run_id, exchange_id, user_id, ws_state, status, sql_list)
 def _worker(run_id, project_key, agent_id, message, exchange_id, started_at,
             user_id, parent_exchange_id, history_limit, user_suffix, screen_context=None,
             prior_recall_enabled=False, deadline_s=MAX_RUN_SECONDS, mode=None,
-            engine=None):
+            engine=None, studio_context_enabled=False):
     """Run one agent completion, stream its events into the run, then persist.
 
     Mirrors the old SSE generator's body but writes into the shared run state
@@ -393,10 +439,16 @@ def _worker(run_id, project_key, agent_id, message, exchange_id, started_at,
     # other branches) are excluded.
     # Best-effort: if the history read fails, degrade to the current turn alone (never
     # break the chat).
+    chain_ids = []
     try:
-        history, prior_results = chat_v5.chain_context_for_agent(
-            user_id, parent_exchange_id, history_limit
-        )
+        if studio_context_enabled:
+            history, prior_results, chain_ids = chat_v5.chain_context_for_agent(
+                user_id, parent_exchange_id, history_limit, with_ids=True
+            )
+        else:
+            history, prior_results = chat_v5.chain_context_for_agent(
+                user_id, parent_exchange_id, history_limit
+            )
     except Exception:
         logger.exception("history assembly failed; sending current turn only")
         history, prior_results = [], []
@@ -417,8 +469,28 @@ def _worker(run_id, project_key, agent_id, message, exchange_id, started_at,
             prior_block = context.build_prior_data_block(prior_results)
         except Exception:
             logger.exception("prior-data block assembly failed (non-fatal)")
+    # Studio continuity: the Studio the user sees (validated server side) is
+    # described to the orchestrator ([CURRENT STUDIO] + ⟦owi:studio⟧ ids token) so it
+    # can decide to CONTINUE it (studio.continue) or start a new one. The base
+    # exchange id stays in THIS local variable: it never travels through the agent.
+    # Same opt-in gate as the prior recall (token-aware orchestrator, legacy engine).
+    studio_base = None
+    studio_block = ""
+    if studio_context_enabled:
+        with _LOCK:
+            run_state = _RUNS.get(run_id)
+            run_session = run_state.get("session_id") if run_state else None
+        studio_base = _resolve_studio_base(
+            user_id, exchange_id, run_session, screen_context, chain_ids)
+        if studio_base is not None:
+            try:
+                studio_block = context.build_studio_block(studio_base[1])
+            except Exception:
+                logger.exception("studio block assembly failed (non-fatal)")
+            if not studio_block:
+                studio_base = None
     agent_messages = context.build_completion_messages(
-        history, message, screen_block + prior_block + (user_suffix or ""))
+        history, message, screen_block + studio_block + prior_block + (user_suffix or ""))
     try:
         # Engine selection (route-resolved from the ADMIN profile, never the
         # front): 'native' runs the in-backend orchestrator loop; anything else
@@ -549,6 +621,19 @@ def _worker(run_id, project_key, agent_id, message, exchange_id, started_at,
                         ws_events += 1
                     continue
                 ws_events += 1
+                if event.get("op") == "studio.continue":
+                    # The orchestrator decided to CONTINUE the Studio: with a valid
+                    # base (resolved above, never named by the agent), the decision
+                    # becomes a studio.carry with the SAME seq, relayed IN PLACE of
+                    # the studio.continue. Once per run; without a base it stays a
+                    # no-op relayed as is.
+                    carry = None
+                    if studio_base is not None and not ws_state.get("base_exchange_id"):
+                        carry = workspace_reducer.build_carry(
+                            studio_base[1], studio_base[0], event.get("seq"),
+                            event.get("remove"), event.get("ts"))
+                    if carry is not None:
+                        event = carry
                 ws_state = workspace_reducer.apply(ws_state, event)
             elif etype == "trace":
                 # The RAW footer trace is for PERSISTENCE only - capture it but do

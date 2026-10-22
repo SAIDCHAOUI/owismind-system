@@ -77,10 +77,13 @@ const enriched = computed(() => !!(meta.value && meta.value.verification))
 
 // Degraded mode shows WHY the interactive view is unavailable. With best-effort
 // SQL mapping the remaining reasons are "the agent's table maps to no SQL
-// dataset in this project" or "no usable SQL"; anything rarer (unparseable
-// text, multiple statements) falls back to the generic message.
+// dataset in this project", "the agent read another project's copy of a
+// dataset this project owns" (clone residue, an admin fix) or "no usable SQL";
+// anything rarer (unparseable text, multiple statements) falls back to the
+// generic message.
 const DEGRADED_KEYS = {
   no_matching_dataset: 'ev.degraded.no_dataset',
+  foreign_project_table: 'ev.degraded.foreign_table',
   no_sql: 'ev.degraded.no_sql',
   no_successful_sql: 'ev.degraded.no_sql',
 }

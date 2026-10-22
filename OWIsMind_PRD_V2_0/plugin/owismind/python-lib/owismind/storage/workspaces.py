@@ -37,6 +37,9 @@ MAX_WORKSPACE_JSON_CHARS = protocol.MAX_WORKSPACE_JSON_CHARS
 # Upper bound on the exchange ids checked in one has_workspace lookup (a session read
 # is itself capped at chat_v5.SESSION_MESSAGES_CAP = 500 rows).
 MAX_LOOKUP_IDS = 500
+# Upper bound on the ORIGIN exchanges read for one GET /workspace (Studio continuity):
+# carried widgets are capped at MAX_WIDGETS, so are their distinct origins.
+MAX_ORIGIN_IDS = protocol.MAX_WIDGETS
 
 _WRITE_TIMEOUT_PRE_QUERY = "SET LOCAL statement_timeout TO '30000'"
 
@@ -116,20 +119,106 @@ def read_workspace(user_id, exchange_id):
         df = new_executor().query_to_df(sql, pre_queries=readonly_pre_queries())
         if df is None or len(df) == 0:
             return None
-        raw = df.iloc[0]["workspace"]
-        if not raw or not isinstance(raw, str) or len(raw) > MAX_WORKSPACE_JSON_CHARS:
-            return None
-        return reducer.sanitize(json.loads(raw))
+        return _parse_workspace(df.iloc[0]["workspace"])
     except Exception:
         logger.exception("read_workspace - failed for exchange_id=%s", exchange_id)
         return None
+
+
+def _parse_workspace(raw):
+    """The sanitized document of one stored JSON string, else None (never raises)."""
+    if not raw or not isinstance(raw, str) or len(raw) > MAX_WORKSPACE_JSON_CHARS:
+        return None
+    try:
+        return reducer.sanitize(json.loads(raw))
+    except Exception:
+        return None
+
+
+def read_workspace_meta(user_id, exchange_id):
+    """``(doc, session_id)`` of an exchange the caller OWNS, else ``(None, None)``.
+
+    Same PRIMARY-KEY + owner read as ``read_workspace``, plus the stored session id,
+    so the worker can validate a Studio continuity base (same user, same session).
+    Read-only + statement_timeout. Never raises.
+    """
+    try:
+        if protocol.exchange_id(exchange_id) is None:
+            return None, None
+        ensure_workspaces_table()
+        sql = (
+            "SELECT workspace, session_id FROM {table} "
+            "WHERE exchange_id = {exchange_id} AND user_id = {user_id} LIMIT 1"
+        ).format(
+            table=full_table(WORKSPACES_V1_LOGICAL),
+            exchange_id=sql_value(exchange_id),
+            user_id=sql_value(user_id),
+        )
+        df = new_executor().query_to_df(sql, pre_queries=readonly_pre_queries())
+        if df is None or len(df) == 0:
+            return None, None
+        row = df.iloc[0]
+        doc = _parse_workspace(row["workspace"])
+        if doc is None:
+            return None, None
+        session_id = row["session_id"]
+        return doc, (str(session_id) if isinstance(session_id, str) and session_id else None)
+    except Exception:
+        logger.exception("read_workspace_meta - failed for exchange_id=%s", exchange_id)
+        return None, None
+
+
+def _bounded_ids(exchange_ids, cap):
+    """Unique valid exchange ids, in order, at most ``cap``."""
+    ids = []
+    for value in exchange_ids or []:
+        if protocol.exchange_id(value) is not None and value not in ids:
+            ids.append(value)
+        if len(ids) >= cap:
+            break
+    return ids
+
+
+def read_workspaces(user_id, exchange_ids):
+    """``{exchange_id: provenance}`` of the caller's OWN workspaces among ``exchange_ids``.
+
+    Studio continuity: the provenance of the ORIGIN exchanges of carried widgets.
+    One owner-scoped, read-only primary-key ``IN`` query bounded to MAX_ORIGIN_IDS
+    ids; each document is sanitized and only its provenance is returned. Never
+    raises: any failure reads as ``{}``.
+    """
+    try:
+        ids = _bounded_ids(exchange_ids, MAX_ORIGIN_IDS)
+        if not ids:
+            return {}
+        ensure_workspaces_table()
+        sql = (
+            "SELECT exchange_id, workspace FROM {table} "
+            "WHERE user_id = {user_id} AND exchange_id IN ({ids})"
+        ).format(
+            table=full_table(WORKSPACES_V1_LOGICAL),
+            user_id=sql_value(user_id),
+            ids=", ".join(sql_value(v) for v in ids),
+        )
+        df = new_executor().query_to_df(sql, pre_queries=readonly_pre_queries())
+        out = {}
+        for i in range(len(df) if df is not None else 0):
+            row = df.iloc[i]
+            doc = _parse_workspace(row["workspace"])
+            if doc is not None and row["exchange_id"] in ids:
+                out[str(row["exchange_id"])] = doc.get("provenance") or {}
+        return out
+    except Exception:
+        logger.exception("read_workspaces - lookup failed (non-fatal)")
+        return {}
 
 
 def workspace_exchange_ids(user_id, exchange_ids):
     """The subset of ``exchange_ids`` (owned by the caller) that have a workspace.
 
     One bounded, read-only query (``exchange_id IN (...)`` on the primary key, owner
-    in the WHERE), used to flag ``has_workspace`` on a conversation without N calls.
+    in the WHERE), used by the Studio continuity fallback (/conversation reads
+    ``workspace_flags`` instead).
     Never raises: any failure reads as "no workspace" (empty set).
     """
     try:
@@ -159,6 +248,106 @@ def workspace_exchange_ids(user_id, exchange_ids):
     except Exception:
         logger.exception("workspace_exchange_ids - lookup failed (non-fatal)")
         return set()
+
+
+# Bound on the serialized suggestions read back per row by ``workspace_flags``
+# (3 items x 120 chars, JSON-escaped, fits far below).
+_MAX_SUGGESTIONS_JSON_CHARS = 4000
+
+
+def workspace_flags(user_id, exchange_ids):
+    """``{exchange_id: {"studio": bool, "suggestions": [...]}}`` of the caller's OWN
+    workspaces among ``exchange_ids`` (an exchange without a row is absent).
+
+    Powers /conversation: ``studio`` is True when the stored state has a plan or at
+    least one widget (a document holding only next steps never offers the Studio);
+    ``suggestions`` are the stored next steps re-validated by the protocol rules
+    ([] when none). ONE bounded, owner-scoped, read-only primary-key ``IN`` query;
+    PostgreSQL projects the two small facts from the JSON so the documents
+    themselves never travel. Never raises: any failure reads as ``{}``.
+    """
+    try:
+        ids = _bounded_ids(exchange_ids, MAX_LOOKUP_IDS)
+        if not ids:
+            return {}
+        ensure_workspaces_table()
+        # ``-> 0`` / ``->`` return NULL (never raise) on a missing key or a wrong type.
+        sql = (
+            "SELECT exchange_id, "
+            "CASE WHEN jsonb_typeof(w -> 'plan') = 'object' "
+            "OR jsonb_typeof(w -> 'widgets' -> 0) IS NOT NULL THEN 1 ELSE 0 END AS has_studio, "
+            "CASE WHEN jsonb_typeof(w -> 'suggestions') = 'array' "
+            "THEN (w -> 'suggestions')::text END AS suggestions "
+            "FROM (SELECT exchange_id, workspace::jsonb AS w FROM {table} "
+            "WHERE user_id = {user_id} AND exchange_id IN ({ids})) AS ws"
+        ).format(
+            table=full_table(WORKSPACES_V1_LOGICAL),
+            user_id=sql_value(user_id),
+            ids=", ".join(sql_value(v) for v in ids),
+        )
+        df = new_executor().query_to_df(sql, pre_queries=readonly_pre_queries())
+        out = {}
+        for i in range(len(df) if df is not None else 0):
+            row = df.iloc[i]
+            exchange_id = row["exchange_id"]
+            if exchange_id not in ids:
+                continue
+            raw = row["suggestions"]
+            suggestions = []
+            if isinstance(raw, str) and len(raw) <= _MAX_SUGGESTIONS_JSON_CHARS:
+                try:
+                    suggestions = protocol.suggestion_items(json.loads(raw))
+                except ValueError:
+                    suggestions = []
+            out[str(exchange_id)] = {"studio": _truthy(row["has_studio"]),
+                                     "suggestions": suggestions}
+        return out
+    except Exception:
+        logger.exception("workspace_flags - lookup failed (non-fatal)")
+        return {}
+
+
+def _truthy(value):
+    """1 / True from the driver (int, numpy int, bool) -> True; NULL / NaN / 0 -> False."""
+    try:
+        return bool(value) and int(value) == 1
+    except (TypeError, ValueError):
+        return False
+
+
+def read_exchanges_sql_items(user_id, exchange_ids):
+    """``{exchange_id: [generated_sql items]}`` of the caller's OWN exchanges.
+
+    Studio continuity: the captured SQL (+ 50-row extracts) of the ORIGIN exchanges
+    of carried widgets. One owner-scoped, read-only primary-key ``IN`` query on
+    chat_v5, bounded to MAX_ORIGIN_IDS ids. An exchange that is absent (or not the
+    caller's) is simply missing from the result. Never raises (``{}``).
+    """
+    try:
+        ids = _bounded_ids(exchange_ids, MAX_ORIGIN_IDS)
+        if not ids:
+            return {}
+        sql = (
+            "SELECT exchange_id, generated_sql FROM {table} "
+            "WHERE user_id = {user_id} AND exchange_id IN ({ids})"
+        ).format(
+            table=full_table(CHAT_V5_LOGICAL),
+            user_id=sql_value(user_id),
+            ids=", ".join(sql_value(v) for v in ids),
+        )
+        df = new_executor().query_to_df(sql, pre_queries=readonly_pre_queries())
+        out = {}
+        for i in range(len(df) if df is not None else 0):
+            row = df.iloc[i]
+            if row["exchange_id"] not in ids:
+                continue
+            out[str(row["exchange_id"])] = [
+                it for it in parse_json_list(row["generated_sql"])
+                if isinstance(it, dict) and it.get("sql")]
+        return out
+    except Exception:
+        logger.exception("read_exchanges_sql_items - lookup failed (non-fatal)")
+        return {}
 
 
 def read_exchange_sql_items(user_id, exchange_id):

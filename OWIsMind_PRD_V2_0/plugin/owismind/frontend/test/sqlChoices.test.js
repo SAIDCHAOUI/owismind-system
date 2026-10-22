@@ -46,3 +46,12 @@ test('older backend (no sql_id in queries): the workspace sql_ids, active from t
   assert.equal(c[0].rowCount, 7)
   assert.deepEqual(sqlChoices(null, null, null), [])
 })
+
+test('a carried widget (continued Studio) never labels a query of this exchange', () => {
+  const ws = reduceWorkspace([
+    { type: 'workspace', v: 1, op: 'studio.carry', seq: 1, base_exchange_id: 'ex-a', widgets: [{ id: 'w1', kind: 'table', title: 'Old', sql_id: 's1q1', origin: 'ex-a' }] },
+    { type: 'workspace', v: 1, op: 'widget.add', seq: 2, id: 'w2', kind: 'table', title: 'New', sql_id: 's1q1' },
+  ])
+  const out = sqlChoices({ queries: [{ sql_id: 's1q1' }] }, ws, 's1q1')
+  assert.deepEqual(out[0].widgets, ['New'])
+})

@@ -223,6 +223,33 @@ test('setAnalyzeOpen: closing after a stale scope change re-fetches the host row
   assert.equal(h.refreshRowsCalls.length, 1)
 })
 
+test('rowsShown: the rows window is on screen in the Data view AND in the mounted workspace', () => {
+  const h = makeSurface({ respond: () => ({ rows: [], totals: null }) })
+  assert.equal(h.surface.rowsShown(), true) // Data view
+  h.surface.setAnalyzeOpen(true)
+  assert.equal(h.surface.rowsShown(), false) // Analyze open, workspace not mounted yet
+  h.surface.setWorkspaceActive(true)
+  assert.equal(h.surface.rowsShown(), true) // the workspace data pane browses the same window
+  h.surface.setWorkspaceActive(false)
+  assert.equal(h.surface.rowsShown(), false)
+})
+
+test('ensureFreshRows: a mounting workspace catches up a skipped window exactly once', () => {
+  const h = makeSurface({ respond: () => ({ rows: [], totals: null }) })
+  h.surface.ensureFreshRows() // current window: no request
+  assert.equal(h.refreshRowsCalls.length, 0)
+  h.surface.setAnalyzeOpen(true)
+  h.surface.markRowsStale() // scope changed before the workspace mounted
+  h.surface.setWorkspaceActive(true)
+  h.surface.ensureFreshRows()
+  assert.equal(h.refreshRowsCalls.length, 1)
+  h.surface.ensureFreshRows() // stale flag consumed
+  assert.equal(h.refreshRowsCalls.length, 1)
+  // Back to the Data view: nothing stale left, no second fetch.
+  h.surface.setAnalyzeOpen(false)
+  assert.equal(h.refreshRowsCalls.length, 1)
+})
+
 // --- reset / staleness guards --------------------------------------------------
 
 test('resetDerived clears the calc + analyze + count state and the defaults', async () => {

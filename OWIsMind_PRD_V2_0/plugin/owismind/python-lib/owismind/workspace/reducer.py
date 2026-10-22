@@ -21,11 +21,27 @@ both are pinned by the shared fixtures ``contracts/fixtures/*.json``. The rules:
     wins, position kept), a new key is added while under MAX_PROVENANCE;
   - ``summary`` is derived after every event: ``widget_ids_by_step`` (widget ids
     per step_id, in widget order) and ``sql_ids`` (unique, in this order:
-    provenance keys, then widget sql_ids, then note sql_ids).
+    provenance keys, then widget sql_ids, then note sql_ids). A carried widget
+    (``origin`` set) is skipped in both: its sql_id / step belong to ANOTHER exchange;
+  - Studio continuity. ``studio.continue`` is a no-op here (the worker replaces it
+    by a ``studio.carry`` with the same seq when the base is valid).
+    ``studio.carry`` (backend-built, ``protocol.normalize_carry``): applied ONCE
+    (ignored when ``base_exchange_id`` is already set); the carried widgets whose
+    id is not already in the state are PREPENDED before the widgets of this run,
+    the list is capped at MAX_WIDGETS, ``base_exchange_id`` is set.
+    ``widget.remove`` drops that widget (carried or new). ``widget.add`` with a
+    ``replaces`` id present in the state takes its index and removes it (count
+    unchanged, no cap check); an unknown ``replaces`` is a plain append. The
+    stored widget never keeps ``replaces``;
+  - ``suggest.set``: ``state.suggestions = items`` (last op wins). The key is ABSENT
+    from the state until a valid op arrives (never an empty list). It is ignored by
+    ``summary`` and ``finalize``, never carried (``build_carry`` reads widgets only)
+    and counts as content for ``is_empty`` (a run whose only op is ``suggest.set`` is
+    persisted; whether the Studio opens is the frontend's call: widgets / plan only).
 
 ``finalize`` (backend only, at the end of a run) stamps the run status + exchange id
 and marks each data widget ``orphan`` when its sql_id matches no captured SQL of the
-run. ``sanitize`` re-projects a stored document at read time (defense in depth).
+run (a carried widget keeps its binding: its SQL lives in its origin exchange). ``sanitize`` re-projects a stored document at read time (defense in depth).
 All functions are pure and never mutate their input.
 """
 
@@ -49,11 +65,12 @@ def empty_state():
 
 
 def is_empty(state):
-    """True when the state carries no plan, note, widget nor provenance."""
+    """True when the state carries no plan, note, widget, provenance nor suggestion
+    (nothing to persist)."""
     if not isinstance(state, dict):
         return True
     return not (state.get("plan") or state.get("notes") or state.get("widgets")
-                or state.get("provenance"))
+                or state.get("provenance") or state.get("suggestions"))
 
 
 def _summary(state):
@@ -61,7 +78,8 @@ def _summary(state):
     by_step = {}
     for widget in state["widgets"]:
         step_id = widget.get("step_id")
-        if step_id:
+        # A carried widget's step_id (if any) belongs to the base plan.
+        if step_id and not widget.get("origin"):
             by_step.setdefault(step_id, []).append(widget["id"])
     sql_ids, seen = [], set()
 
@@ -73,7 +91,8 @@ def _summary(state):
     for key in state["provenance"]:
         _add(key)
     for widget in state["widgets"]:
-        _add(widget.get("sql_id"))
+        if not widget.get("origin"):
+            _add(widget.get("sql_id"))
     for note in state["notes"]:
         _add(note.get("sql_id"))
     return {"widget_ids_by_step": by_step, "sql_ids": sql_ids}
@@ -128,7 +147,8 @@ def _entry(event, keys):
 
 
 _NOTE_KEYS = ("id", "kind", "title", "text", "step_id", "sql_id")
-_WIDGET_KEYS = ("id", "kind", "title", "comment", "step_id", "sql_id", "chart", "kpi", "text")
+_WIDGET_KEYS = ("id", "kind", "title", "comment", "step_id", "sql_id", "size", "role", "chart",
+                "kpi", "text")
 _PROV_KEYS = ("agent_key", "tool", "task", "step_id", "duration_ms", "row_count", "success")
 
 
@@ -141,12 +161,40 @@ def _apply_note(state, event):
 
 def _apply_widget(state, event):
     widgets = state["widgets"]
-    if len(widgets) >= p.MAX_WIDGETS or any(w["id"] == event["id"] for w in widgets):
+    if any(w["id"] == event["id"] for w in widgets):
         return
     widget = _entry(event, _WIDGET_KEYS)
     if widget["kind"] in p.DATA_WIDGET_KINDS:
         widget["binding"] = "explicit"
+    replaces = event.get("replaces")
+    for index, current in enumerate(widgets):
+        if replaces and current["id"] == replaces:
+            widgets[index] = widget
+            return
+    if len(widgets) >= p.MAX_WIDGETS:
+        return
     widgets.append(widget)
+
+
+def _apply_widget_remove(state, event):
+    state["widgets"] = [w for w in state["widgets"] if w["id"] != event["id"]]
+
+
+def _apply_studio_continue(state, event):
+    """No-op: the decision is materialized by the worker's studio.carry."""
+
+
+def _apply_carry(state, event):
+    if state.get("base_exchange_id"):
+        return
+    existing = set(w["id"] for w in state["widgets"])
+    carried = [copy.deepcopy(w) for w in event["widgets"] if w["id"] not in existing]
+    state["widgets"] = (carried + state["widgets"])[:p.MAX_WIDGETS]
+    state["base_exchange_id"] = event["base_exchange_id"]
+
+
+def _apply_suggest(state, event):
+    state["suggestions"] = list(event["items"])
 
 
 def _apply_prov(state, event):
@@ -164,7 +212,18 @@ _HANDLERS = {
     "note.add": _apply_note,
     "widget.add": _apply_widget,
     "prov.set": _apply_prov,
+    "studio.continue": _apply_studio_continue,
+    "widget.remove": _apply_widget_remove,
+    "studio.carry": _apply_carry,
+    "suggest.set": _apply_suggest,
 }
+
+
+def _normalize_event(event):
+    """Agent ops through ``normalize_op``; the backend carry through its own gate."""
+    if isinstance(event, dict) and event.get("op") == "studio.carry":
+        return p.normalize_carry(event)
+    return p.normalize_op(event)
 
 
 def apply(state, event):
@@ -173,7 +232,7 @@ def apply(state, event):
     An invalid event (fails normalization) or a replayed ``seq`` returns the state
     unchanged (same content, new object)."""
     base = state if isinstance(state, dict) else empty_state()
-    normalized = p.normalize_op(event)
+    normalized = _normalize_event(event)
     if normalized is None or normalized["seq"] <= base.get("last_seq", 0):
         return copy.deepcopy(base)
     new = copy.deepcopy(base)
@@ -181,6 +240,37 @@ def apply(state, event):
     _HANDLERS[normalized["op"]](new, normalized)
     new["summary"] = _summary(new)
     return new
+
+
+def apply_carry(state, carry_event):
+    """Apply the worker's ``studio.carry`` (same rules as ``apply``; explicit name for
+    the one backend-generated op)."""
+    if not isinstance(carry_event, dict) or carry_event.get("op") != "studio.carry":
+        return copy.deepcopy(state if isinstance(state, dict) else empty_state())
+    return apply(state, carry_event)
+
+
+def build_carry(base_doc, base_exchange_id, seq, remove=None, ts=None):
+    """The ``studio.carry`` event continuing ``base_doc`` (a sanitized workspace of
+    ``base_exchange_id``), or None when nothing valid is left to carry.
+
+    Each widget keeps its id and sql_id; ``origin`` is flattened (``w.origin`` when
+    the base itself carried it, else the base exchange): never a chain. ``remove``
+    ids are dropped; unknown ids are ignored. Pure."""
+    if not isinstance(base_doc, dict) or p.exchange_id(base_exchange_id) is None:
+        return None
+    dropped = set(p.id_list(remove, p.MAX_CARRY_REMOVE))
+    widgets = []
+    for raw in base_doc.get("widgets") or []:
+        if not isinstance(raw, dict) or raw.get("id") in dropped:
+            continue
+        widget = dict(raw, origin=p.exchange_id(raw.get("origin")) or base_exchange_id)
+        widgets.append(widget)
+    event = {"type": p.EVENT_TYPE, "v": p.PROTOCOL_VERSION, "op": "studio.carry",
+             "seq": seq, "base_exchange_id": base_exchange_id, "widgets": widgets}
+    if ts is not None:
+        event["ts"] = ts
+    return p.normalize_carry(event)
 
 
 def reduce_events(events, state=None):
@@ -207,6 +297,8 @@ def finalize(state, status, exchange_id=None, known_sql_ids=None):
     if known_sql_ids is not None:
         known = set(known_sql_ids)
         for widget in new.get("widgets") or []:
+            if widget.get("origin"):
+                continue
             if widget.get("kind") in p.DATA_WIDGET_KINDS:
                 widget["binding"] = "explicit" if widget.get("sql_id") in known else "orphan"
     return new
@@ -234,6 +326,8 @@ def sanitize(doc):
             state["exchange_id"] = exchange_id[:_MAX_EXCHANGE_ID_CHARS]
         if p.is_int(doc.get("last_seq"), 0):
             state["last_seq"] = doc["last_seq"]
+        if p.exchange_id(doc.get("base_exchange_id")) is not None:
+            state["base_exchange_id"] = doc["base_exchange_id"]
 
         plan = doc.get("plan")
         if isinstance(plan, dict) and plan.get("origin") in p.PLAN_ORIGINS:
@@ -288,6 +382,8 @@ def sanitize(doc):
                 widget["binding"] = binding if binding in p.BINDINGS else "explicit"
             if p.ts_value(raw.get("ts")) is not None:
                 widget["ts"] = raw["ts"]
+            if p.exchange_id(raw.get("origin")) is not None:
+                widget["origin"] = raw["origin"]
             state["widgets"].append(widget)
             if len(state["widgets"]) >= p.MAX_WIDGETS:
                 break
@@ -304,6 +400,10 @@ def sanitize(doc):
                 state["provenance"][key] = entry
                 if len(state["provenance"]) >= p.MAX_PROVENANCE:
                     break
+
+        suggestions = p.suggestion_items(doc.get("suggestions"))
+        if suggestions:
+            state["suggestions"] = suggestions
 
         state["summary"] = _summary(state)
         return state

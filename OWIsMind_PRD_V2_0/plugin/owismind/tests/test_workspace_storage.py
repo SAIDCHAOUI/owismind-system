@@ -206,5 +206,49 @@ class ReadTests(_Base):
         self.assertIn("SET LOCAL transaction_read_only TO on", self.calls[0]["pre"])
 
 
+
+class ContinuityReadTests(_Base):
+    def test_meta_returns_doc_and_session(self):
+        self.rows = [{"workspace": json.dumps(_final_state()), "session_id": "sess-1"}]
+        doc, session = workspaces.read_workspace_meta("u.one", "ex-1")
+        self.assertEqual((doc, session), (_final_state(), "sess-1"))
+        call = self.calls[0]
+        self.assertIn("exchange_id = 'ex-1' AND user_id = 'u.one'", call["sql"])
+        self.assertIn("SET LOCAL transaction_read_only TO on", call["pre"])
+
+    def test_meta_degrades(self):
+        self.assertEqual(workspaces.read_workspace_meta("u", "ex-1"), (None, None))
+        self.assertEqual(workspaces.read_workspace_meta("u", "bad id'; --"), (None, None))
+        self.assertEqual(len(self.calls), 1)            # a forged id never queries
+        self.rows = [{"workspace": "{bad", "session_id": "s"}]
+        self.assertEqual(workspaces.read_workspace_meta("u", "ex-1"), (None, None))
+
+    def test_origin_reads_bounded_and_owner_scoped(self):
+        ids = ["ex-%d" % i for i in range(30)] + ["bad id", "ex-1"]
+        self.rows = [{"exchange_id": "ex-1", "workspace": json.dumps(_final_state()),
+                      "generated_sql": json.dumps([{"sql": "SELECT 1", "sql_id": "s1q1"},
+                                                   {"no": "sql"}])},
+                     {"exchange_id": "ex-99", "workspace": json.dumps(_final_state()),
+                      "generated_sql": "[]"}]
+        prov = workspaces.read_workspaces("u.one", ids)
+        self.assertEqual(sorted(prov), ["ex-1"])          # unrequested id ignored
+        self.assertEqual(prov["ex-1"], _final_state()["provenance"])
+        items = workspaces.read_exchanges_sql_items("u.one", ids)
+        self.assertEqual(items, {"ex-1": [{"sql": "SELECT 1", "sql_id": "s1q1"}]})
+        for call in self.calls:
+            self.assertIn("user_id = 'u.one' AND exchange_id IN (", call["sql"])
+            self.assertEqual(call["sql"].count("'ex-"), workspaces.MAX_ORIGIN_IDS)
+            self.assertNotIn("bad id", call["sql"])
+            self.assertIn("SET LOCAL transaction_read_only TO on", call["pre"])
+            self.assertEqual(call["post"], [])
+
+    def test_origin_reads_skip_empty_and_degrade(self):
+        self.assertEqual(workspaces.read_workspaces("u", []), {})
+        self.assertEqual(workspaces.read_exchanges_sql_items("u", [None]), {})
+        self.assertEqual(self.calls, [])
+        self.boom = True
+        self.assertEqual(workspaces.read_workspaces("u", ["ex-1"]), {})
+        self.assertEqual(workspaces.read_exchanges_sql_items("u", ["ex-1"]), {})
+
 if __name__ == "__main__":
     unittest.main()

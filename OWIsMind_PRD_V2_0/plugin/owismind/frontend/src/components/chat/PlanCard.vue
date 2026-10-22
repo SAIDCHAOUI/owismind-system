@@ -10,6 +10,7 @@ import { useI18n } from 'vue-i18n'
 import { useChatStore } from '../../stores/chat.js'
 import { useWorkspaceStore } from '../../stores/workspace.js'
 import { stepsWithProgress, planProgress } from '../../composables/workspaceModel.js'
+import { settlePlanState } from '../../composables/planSettle.js'
 
 const { t } = useI18n()
 const chat = useChatStore()
@@ -20,7 +21,9 @@ const entry = computed(() => {
   const last = turns.length ? turns[turns.length - 1].exchange : null
   return last ? ws.entryFor(last.id, last.uid) : null
 })
-const state = computed(() => (entry.value ? entry.value.state : null))
+// A successfully finished run shows its plan concluded (see planSettle.js): the final
+// answer closes the steps the orchestrator left open (e.g. the synthesis step).
+const state = computed(() => (entry.value ? settlePlanState(entry.value.state) : null))
 const plan = computed(() => (state.value ? state.value.plan : null))
 const steps = computed(() => (plan.value ? stepsWithProgress(state.value) : []))
 const progress = computed(() => planProgress(state.value))

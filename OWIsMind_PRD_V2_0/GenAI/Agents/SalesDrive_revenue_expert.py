@@ -802,7 +802,11 @@ def _build_understand_prompt_base(profile, current_date, lang_hint="fr"):
         "- \"compare_scenarios\": compare scenario values (delta/variance/gap) "
         "-> fill \"scenarios\" with the 2+ values involved.\n"
         "- \"compare_periods\": compare time periods (YoY, MoM, H1 vs H1) -> "
-        "fill \"periods\" with one {start,end,label} per period.\n"
+        "fill \"periods\" with one {start,end,label} per period. A comparison "
+        "with the same period last year, the previous year or the budget on the "
+        "same months gives EVERY period the SAME months (e.g. 2026-01-01.."
+        "2026-08-31 and 2025-01-01..2025-08-31), never a full year against a "
+        "partial one; each label names its months.\n"
         "- \"trend\": evolution over time (monthly series).\n"
         "- \"list_values\": the user asks WHICH values exist for an axis "
         "(\"quels clients ?\", \"liste des produits\") -> set list_column.\n"
@@ -1125,6 +1129,15 @@ def metric_unit(metric):
 # tool must know its SQL feeds a result table that an LLM reads to answer).
 # =============================================================================
 
+# Comparison periods (product-owner replay 2026-10-22: a "same period last year"
+# figure came back over the FULL previous year and was published as Jan-Aug).
+PERIOD_ALIGNMENT_NOTE = (
+    "PERIOD ALIGNMENT: when the USER QUESTION compares figures over several "
+    "periods (same period last year, previous year, budget on the same months), "
+    "bound EVERY compared figure to the SAME months (e.g. January to August of "
+    "each year), never a full year against a partial one, and alias each "
+    "figure's column with the months it covers (e.g. total_2025_01_to_08).")
+
 SEMANTIC_DESTINATION_NOTE = (
     "CONTEXT: the SQL you generate will produce a result table that is "
     "displayed to the user AND read by another LLM to write the final "
@@ -1361,6 +1374,8 @@ def build_semantic_question(u, profile, filters):
         else:
             parts.append("PERIOD: do not apply any filter on %s." % tm["column"])
 
+    if tm:
+        parts.append(PERIOD_ALIGNMENT_NOTE)
     parts.append(SEMANTIC_DESTINATION_NOTE)
     return " ".join(parts)
 
@@ -1677,6 +1692,16 @@ _SCOPE_DEFAULT = {"fr": " (par défaut)", "en": " (default)"}
 _SCOPE_PERIOD = {"fr": "période", "en": "period"}
 _SCOPE_NO_YEAR = {"fr": " (aucun filtre d'année)", "en": " (no year filter)"}
 _SCOPE_CURRENCY = {"fr": "montants en ", "en": "figures in "}
+_SCOPE_RANGE = {"fr": "%s (du %s au %s)", "en": "%s (from %s to %s)"}
+
+
+def _scope_period_text(period, lang):
+    """A period label with the exact dates it covers (once, never doubled)."""
+    label = period.get("label", "")
+    start, end = period.get("start", ""), period.get("end", "")
+    if not start or not end or start in label:
+        return label
+    return _SCOPE_RANGE[lang] % (label, start, end)
 
 
 def build_scope_note(u, profile, filters, lang):
@@ -1693,8 +1718,14 @@ def build_scope_note(u, profile, filters, lang):
     tm = profile.time
     if tm:
         period = (u.get("period") or {})
-        if period.get("mode") == "explicit":
-            bits.append("%s : %s" % (_SCOPE_PERIOD[lang], period.get("label", "")))
+        periods = u.get("periods") or []
+        if u.get("intent") == "compare_periods" and periods:
+            # A comparison states the exact months of EVERY compared figure.
+            bits.append("%s : %s" % (_SCOPE_PERIOD[lang], " ; ".join(
+                _scope_period_text(p, lang) for p in periods)))
+        elif period.get("mode") == "explicit":
+            bits.append("%s : %s" % (_SCOPE_PERIOD[lang],
+                                     _scope_period_text(period, lang)))
         else:
             bits.append("%s : %s%s" % (_SCOPE_PERIOD[lang], PERIOD_ALL_LABEL[lang],
                                        _SCOPE_NO_YEAR[lang]))

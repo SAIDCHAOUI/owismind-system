@@ -6,7 +6,7 @@
 // DB-side aggregation, bounded distinct) so the frontend behaves exactly as in DSS.
 
 // --- deterministic PRNG (mulberry32) -----------------------------------------
-function mulberry32(seed) {
+export function mulberry32(seed) {
   let a = seed >>> 0
   return function () {
     a |= 0

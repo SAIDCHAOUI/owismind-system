@@ -80,7 +80,7 @@ const deltaText = computed(() => {
     <div v-else class="kpi-card" :class="{ bare }">
       <span class="kpi-label">{{ label }}</span>
       <span class="kpi-value" :title="valueTitle || null">
-        {{ valueText }}<span v-if="unit" class="kpi-unit">{{ ' ' + unit }}</span>
+        {{ valueText }}<span v-if="unit" class="kpi-unit">{{ '\u00A0' + unit }}</span>
       </span>
       <span v-if="hasDelta" class="kpi-delta" :class="deltaSign">
         <span class="kpi-arrow" aria-hidden="true">

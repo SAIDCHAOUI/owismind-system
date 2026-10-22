@@ -10,14 +10,19 @@ a fake trace. Covered:
   - publish_widget binds to an EXPLICIT result_id; an unknown or missing id is
     refused with the list of available ids (never a "latest" fallback); a legacy
     ARTIFACT is still emitted for data widgets (D3);
-  - auto plan (D4) when the model skips write_plan, and the auto-table safety net
+  - auto plan (D4, lazy since 2026-10-22) when the model skips write_plan, and
+    the auto-table safety net
     bound to the exact result id;
   - node_finish closes a step left 'running' (error + honest note);
   - recall: the recalled rows get their own result_id (s0q1), stamped on the
     evidence span, publishable as a widget;
   - EVERY emitted WORKSPACE op is accepted by the backend contract normalizer
     (plugin python-lib owismind.workspace.protocol) and reduces cleanly;
-  - _Workspace caps (12 widgets, 30 notes, 10 steps, 80 events, 200 KB) and ids.
+  - _Workspace caps (12 widgets, 30 notes, 10 steps, 80 events, 200 KB) and ids;
+  - Studio continuity: ⟦owi:studio⟧ parse / strip, edit_studio exposed only with
+    the token, the publish-before-decision guard (once), continue -> studio.continue
+    (+ remove), ids allocated past the carried ones, replaces, widget.remove,
+    refusal when the board would exceed 12 widgets, new mode.
 """
 
 import importlib.util
@@ -90,8 +95,11 @@ class FakeCompletion(object):
     def __init__(self, project, llm_id):
         self.project, self.llm_id = project, llm_id
         self.settings = {}
+        self.messages = []
+        project.completions.append(self)
 
     def with_message(self, content, role="user"):
+        self.messages.append((role, content))
         return self
 
     def with_tool_calls(self, *a, **k):
@@ -114,6 +122,7 @@ class FakeProject(object):
         self.responses = list(responses)
         self.sub_streams = sub_streams or {}
         self.tool_outputs = {}
+        self.completions = []
 
     def get_llm(self, llm_id):
         project = self
@@ -363,12 +372,9 @@ class TestAutoPlanAndSafetyNet(GraphCase):
             Resp("Voici le CA."),
         ], {REVENUE_ID: REV_STREAM})
         ops = self.ws_ops(chunks)
-        kinds = self.kinds(chunks)
-        self.assertLess(kinds.index("WORKSPACE"), kinds.index("CALLING_AGENT"))
-        self.assertEqual(ops[0]["op"], "plan.set")
-        self.assertEqual(ops[0]["origin"], "auto")
-        self.assertEqual(ops[0]["mission"], "CA 2025 par region")
-        self.assertIn("PLAN AUTO-CREATED", self.project.tool_outputs["c1"])
+        # Lazy D4: ONE specialist call and no section text -> no auto plan.
+        self.assertNotIn("plan.set", [o["op"] for o in ops])
+        self.assertNotIn("PLAN AUTO-CREATED", self.project.tool_outputs["c1"])
         # The model published nothing: the safety net adds a table bound to s1q1.
         widgets = [o for o in ops if o["op"] == "widget.add"]
         self.assertEqual(len(widgets), 1)
@@ -420,6 +426,237 @@ class TestRecallIsPublishable(GraphCase):
         span = [s for s in self.trace.spans if s.name == "semantic-model-query"][0]
         self.assertEqual(span.outputs["sql_id"], "s0q1")
         self.assert_contract(self.ws_ops(chunks))
+
+
+class TestStudioReport(GraphCase):
+    """Studio-first analysis: the intro text widget published with write_plan is
+    shown BEFORE the specialist runs; the theme text precedes its data widget; a
+    text widget binds to a result only when that result exists in the run."""
+
+    def setUp(self):
+        super().setUp()
+        self.chunks = self.run_turn("Analyse 360 du CA", [
+            Resp("", [
+                call("c1", "write_plan", mission="Analyse 360 du CA",
+                     steps=["CA par region"]),
+                call("c2", "publish_widget", kind="text", title="Perimetre",
+                     text="CA ACTUALS 2025, toutes regions.", result_id="s1q1"),
+                call("c3", "ask_revenue_expert", task="CA 2025 par region"),
+            ]),
+            Resp("", [
+                call("c4", "publish_widget", kind="text", title="CA par region",
+                     text="Le **Nord** mene avec 1 200 EUR.", result_id="s1q1",
+                     step="p1"),
+                call("c5", "publish_widget", kind="chart", title="CA 2025 par region",
+                     result_id="s1q1", chart_type="bar", x="region", y=["revenue"]),
+                call("c6", "publish_widget", kind="text", title="Synthese",
+                     text="- Nord en tete"),
+            ]),
+            Resp("Le Nord mene. Le detail est dans le Studio."),
+        ], {REVENUE_ID: REV_STREAM})
+        self.ops = self.ws_ops(self.chunks)
+
+    def test_intro_text_published_before_the_specialist_runs(self):
+        events = [c for c in self.chunks if c.get("type") == "event"]
+        intro_at = next(i for i, c in enumerate(events)
+                        if c.get("eventKind") == "WORKSPACE"
+                        and c["eventData"].get("op") == "widget.add")
+        calling_at = next(i for i, c in enumerate(events)
+                          if c.get("eventKind") == "CALLING_AGENT")
+        self.assertLess(intro_at, calling_at)
+        self.assertIn("Text block w1 published in the Studio",
+                      self.project.tool_outputs["c2"])
+
+    def test_reading_order_and_honest_text_binding(self):
+        widgets = [o for o in self.ops if o["op"] == "widget.add"]
+        self.assertEqual([(w["id"], w["kind"], w.get("sql_id")) for w in widgets],
+                         [("w1", "text", None),          # s1q1 did not exist yet
+                          ("w2", "text", "s1q1"),
+                          ("w3", "chart", "s1q1"),
+                          ("w4", "text", None)])
+        self.assertIn("Do not repeat its rows in the chat",
+                      self.project.tool_outputs["c5"])
+        state = self.assert_contract(self.ops)
+        self.assertEqual(len(state["widgets"]), 4)
+
+    def test_batch_with_a_data_widget_keeps_its_order(self):
+        chunks = self.run_turn("Analyse", [
+            Resp("", [call("c1", "ask_revenue_expert", task="CA 2025 par region")]),
+            Resp("", [
+                call("c2", "publish_widget", kind="table", title="CA", result_id="s1q1"),
+                call("c3", "publish_widget", kind="text", title="Lecture",
+                     text="Le Nord mene."),
+                call("c4", "ask_tickets_expert", task="Tickets ouverts par region"),
+            ]),
+            Resp("Fini."),
+        ], {REVENUE_ID: REV_STREAM, TICKETS_ID: TIX_STREAM})
+        widgets = [o for o in self.ws_ops(chunks) if o["op"] == "widget.add"]
+        self.assertEqual([w["kind"] for w in widgets], ["table", "text"])
+
+    def test_prompt_states_the_studio_first_contract(self):
+        prompt = orch.build_system_prompt(orch.CAPABILITIES, "fr")
+        self.assertIn("THE STUDIO REPORT", prompt)
+        self.assertIn("Synthèse et points clés", prompt)
+        self.assertIn("3 to 6 lines", prompt)
+        self.assertIn("SIMPLE QUESTION", prompt)
+        self.assertIn("at most %d widgets" % orch.WS_MAX_WIDGETS, orch.PERSONA_DEFAULT)
+        for dash in ("\u2014", "\u2013"):
+            self.assertNotIn(dash, prompt)
+
+    def test_prompt_states_the_dashboard_layout_rules(self):
+        prompt = orch.build_system_prompt(orch.CAPABILITIES, "fr")
+        self.assertIn("DENSE DASHBOARD", prompt)
+        self.assertIn("role 'scope'", prompt)
+        self.assertIn("Studio HEADER", prompt)
+        self.assertIn("ONE SECTION PER BUSINESS THEME", prompt)
+        self.assertIn("IMMEDIATELY followed by its chart or table", prompt)
+        self.assertIn("size 'wide'", prompt)
+        self.assertIn("NEVER a table that duplicates a chart", prompt)
+        self.assertIn("SPACE RULE", prompt)
+        self.assertIn("never two texts in a row except the closing synthesis", prompt)
+        self.assertIn("never compute a new one yourself", prompt)   # anti-calculation kept
+
+    def test_tool_schema_exposes_size_and_role(self):
+        spec = next(t["function"] for t in orch._ws_tool_specs()
+                    if t["function"]["name"] == "publish_widget")
+        props = spec["parameters"]["properties"]
+        self.assertEqual(props["size"]["enum"], ["normal", "wide"])
+        self.assertEqual(props["role"]["enum"], ["section", "scope"])
+        self.assertEqual(list(orch.WS_WIDGET_SIZES), list(ws_protocol.WIDGET_SIZES))
+        self.assertEqual(list(orch.WS_TEXT_ROLES), list(ws_protocol.TEXT_ROLES))
+        self.assertEqual(list(orch.WS_SIZED_WIDGET_KINDS),
+                         list(ws_protocol.SIZED_WIDGET_KINDS))
+
+
+class TestStudioLayoutHints(GraphCase):
+    """size / role pass through to widget.add; the scope widget is published
+    BEFORE the specialists run, even when the batch also carries a data widget."""
+
+    def test_scope_first_and_hints_pass_through(self):
+        chunks = self.run_turn("Analyse 360", [
+            Resp("", [call("c1", "ask_revenue_expert", task="CA 2025 par region")]),
+            Resp("", [
+                call("c2", "publish_widget", kind="text", title="CA par region",
+                     text="Le Nord mene.", role="section", size="wide"),
+                call("c3", "publish_widget", kind="chart", title="CA par region",
+                     result_id="s1q1", chart_type="bar", x="region", y=["revenue"],
+                     size="wide", role="scope"),
+                call("c4", "publish_widget", kind="text", title="Perimetre",
+                     text="CA et tickets 2025.", role="scope"),
+                call("c5", "publish_widget", kind="kpi", title="CA total",
+                     result_id="s1q1", kpi_value="revenue", size="wide"),
+                call("c6", "ask_tickets_expert", task="Tickets ouverts par region"),
+            ]),
+            Resp("Fini."),
+        ], {REVENUE_ID: REV_STREAM, TICKETS_ID: TIX_STREAM})
+        events = [c for c in chunks if c.get("type") == "event"]
+        widget_at = [(i, c["eventData"]) for i, c in enumerate(events)
+                     if c.get("eventKind") == "WORKSPACE"
+                     and c["eventData"].get("op") == "widget.add"]
+        calling_at = [i for i, c in enumerate(events)
+                      if c.get("eventKind") == "CALLING_AGENT"]
+        widgets = [w for _, w in widget_at]
+        # Scope first and before the second specialist starts; then board order.
+        self.assertEqual([w["title"] for w in widgets],
+                         ["Perimetre", "CA par region", "CA par region", "CA total"])
+        self.assertLess(widget_at[0][0], calling_at[-1])
+        self.assertGreater(widget_at[1][0], calling_at[-1])
+        scope, text, chart, kpi = widgets
+        self.assertEqual(scope.get("role"), "scope")
+        self.assertEqual(text.get("role"), "section")
+        self.assertNotIn("size", text)                  # size is chart / table only
+        self.assertEqual(chart.get("size"), "wide")
+        self.assertNotIn("role", chart)                 # role is text only
+        self.assertNotIn("size", kpi)
+        state = self.assert_contract(self.ws_ops(chunks))
+        self.assertEqual(state["widgets"][0]["role"], "scope")
+        self.assertEqual(state["widgets"][2]["size"], "wide")
+
+    def test_invalid_hints_dropped(self):
+        chunks = self.run_turn("Analyse", [
+            Resp("", [call("c1", "ask_revenue_expert", task="CA 2025 par region")]),
+            Resp("", [
+                call("c2", "publish_widget", kind="text", title="Lecture",
+                     text="Le Nord mene.", role="header"),
+                call("c3", "publish_widget", kind="table", title="CA",
+                     result_id="s1q1", size="huge"),
+            ]),
+            Resp("Fini."),
+        ], {REVENUE_ID: REV_STREAM})
+        widgets = [o for o in self.ws_ops(chunks) if o["op"] == "widget.add"]
+        self.assertEqual(len(widgets), 2)
+        self.assertNotIn("role", widgets[0])
+        self.assertNotIn("size", widgets[1])
+
+
+class TestDuplicateWidgetGuard(GraphCase):
+    """The same widget published twice in ONE run is not duplicated: kind +
+    normalised title + sql_id (or the same body for an unbound text). The model
+    gets the existing id; replaces and genuinely different widgets still pass."""
+
+    def setUp(self):
+        super().setUp()
+        self.chunks = self.run_turn("Revenue review", [
+            Resp("", [call("c1", "ask_revenue_expert", task="Revenue 2025 by region")]),
+            Resp("", [
+                call("c2", "publish_widget", kind="text", title="Revenue mix by offer",
+                     text="**North leads.** Body.", result_id="s1q1"),
+                call("c3", "publish_widget", kind="chart", title="Revenue by region",
+                     result_id="s1q1", chart_type="bar", x="region", y=["revenue"]),
+                call("c4", "publish_widget", kind="text", title="Note",
+                     text="Same  body"),
+            ]),
+            Resp("", [
+                # Same kind + title (case / spaces differ) + sql_id: duplicate.
+                call("c5", "publish_widget", kind="text",
+                     title="  revenue MIX   by offer ", text="Other body.",
+                     result_id="s1q1"),
+                # Same chart again: duplicate.
+                call("c6", "publish_widget", kind="chart", title="Revenue by region",
+                     result_id="s1q1", chart_type="line", x="region", y=["revenue"]),
+                # Unbound text with the same title and body: duplicate.
+                call("c7", "publish_widget", kind="text", title="note",
+                     text=" same body "),
+                # Unbound text, same title, different body: published.
+                call("c8", "publish_widget", kind="text", title="Note",
+                     text="A different body."),
+                # An explicit replacement is never treated as a duplicate.
+                call("c9", "publish_widget", kind="chart", title="Revenue by region",
+                     result_id="s1q1", chart_type="pie", x="region", y=["revenue"],
+                     replaces="w2"),
+            ]),
+            Resp("Done. The detail is in the Studio."),
+        ], {REVENUE_ID: REV_STREAM})
+        self.ops = self.ws_ops(self.chunks)
+
+    def test_duplicates_are_refused_with_the_existing_id(self):
+        out = self.project.tool_outputs
+        self.assertIn("Widget w1 is already on the board, not duplicated", out["c5"])
+        self.assertIn("Widget w2 is already on the board, not duplicated", out["c6"])
+        self.assertIn("Widget w3 is already on the board, not duplicated", out["c7"])
+        self.assertIn("Text block w4 published", out["c8"])
+        self.assertIn("published in the Studio", out["c9"])
+        self.assertIn("in place of w2", out["c9"])
+
+    def test_board_holds_each_widget_once(self):
+        adds = [o for o in self.ops if o["op"] == "widget.add"]
+        self.assertEqual([w["id"] for w in adds], ["w1", "w2", "w3", "w4", "w5"])
+        self.assertEqual(adds[-1].get("replaces"), "w2")
+        state = self.assert_contract(self.ops)
+        self.assertEqual(len(state["widgets"]), 4)
+        # Only the two real data widgets emitted a legacy ARTIFACT (no duplicate).
+        artifacts = [c for c in self.chunks if c.get("type") == "event"
+                     and c.get("eventKind") == "ARTIFACT"]
+        self.assertEqual(len(artifacts), 2)
+
+    def test_signature_is_case_and_space_insensitive(self):
+        sig = orch._Workspace.widget_signature
+        self.assertEqual(sig({"kind": "kpi", "title": "Total  2025", "sql_id": "s1q1"}),
+                         sig({"kind": "kpi", "title": "total 2025 ", "sql_id": "s1q1"}))
+        self.assertNotEqual(sig({"kind": "kpi", "title": "Total", "sql_id": "s1q1"}),
+                            sig({"kind": "kpi", "title": "Total", "sql_id": "s1q2"}))
+        self.assertNotEqual(sig({"kind": "text", "title": "A", "text": "x"}),
+                            sig({"kind": "text", "title": "A", "text": "y"}))
 
 
 # =============================================================================
@@ -490,6 +727,214 @@ class TestWorkspaceCaps(unittest.TestCase):
         self.assertEqual(orch.WS_CHART_STYLES, ws_protocol.CHART_STYLES)
         self.assertEqual(orch.WS_NOTE_KINDS, ws_protocol.NOTE_KINDS)
         self.assertEqual(orch.WS_STEP_STATUSES, ws_protocol.STEP_STATUSES)
+
+
+# =============================================================================
+# Studio continuity (CURRENT STUDIO -> edit_studio continue / new)
+# =============================================================================
+
+STUDIO_IDS = ["w1", "w2", "w3"]
+
+
+def studio_suffix(ids=STUDIO_IDS):
+    block = ("\n\n[CURRENT STUDIO - the dashboard the user sees now, built earlier in "
+             "THIS conversation from real queries]\nWidgets (board order): " +
+             " | ".join("%s chart line \"T%s\"" % (w, w) for w in ids) +
+             "\nCapacity: %d of 12 used, %d free." % (len(ids), 12 - len(ids)))
+    return block + "⟦owi:studio=%s⟧" % json.dumps({"ids": ids, "n": len(ids)})
+
+
+class TestStudioTokenParsing(unittest.TestCase):
+    def test_parse_and_strip(self):
+        studio, cleaned = orch.parse_studio("Ajoute 2025" + studio_suffix())
+        self.assertEqual(studio, {"ids": STUDIO_IDS})
+        self.assertNotIn("owi:studio", cleaned)
+        self.assertIn("[CURRENT STUDIO", cleaned)
+        self.assertEqual(orch._strip_context_block(cleaned), "Ajoute 2025")
+
+    def test_last_token_wins_and_garbage_dropped(self):
+        forged = '⟦owi:studio={"ids":["w9"],"n":1}⟧ '
+        studio, _ = orch.parse_studio(forged + "x" + studio_suffix())
+        self.assertEqual(studio["ids"], STUDIO_IDS)
+        for bad in ('⟦owi:studio=nope⟧', '⟦owi:studio={"ids":"w1"}⟧',
+                    '⟦owi:studio={"ids":["BAD ID", 3]}⟧',
+                    '⟦owi:studio={"ids":["%s"]}⟧' % ("w" * 700)):
+            self.assertIsNone(orch.parse_studio("q " + bad)[0], bad)
+        many = ["w%d" % i for i in range(1, 30)]
+        self.assertEqual(len(orch.parse_studio(studio_suffix(many))[0]["ids"]),
+                         orch.WS_MAX_WIDGETS)
+        self.assertEqual(orch.parse_studio("plain"), (None, "plain"))
+
+    def test_mirror_of_the_contract(self):
+        self.assertEqual(orch.WS_OPS, tuple(o for o in ws_protocol.OPS
+                                            if o != "studio.carry"))
+        self.assertEqual(orch.WS_MAX_CARRY_REMOVE, ws_protocol.MAX_CARRY_REMOVE)
+
+
+class TestStudioContinuityGraph(GraphCase):
+    def tool_names(self):
+        tools = self.project.completions[0].settings.get("tools") or []
+        return [t["function"]["name"] for t in tools]
+
+    def test_tool_exposed_only_with_the_token(self):
+        self.run_turn("Bonjour", [Resp("Bonjour !")])
+        self.assertNotIn("edit_studio", self.tool_names())
+        self.run_turn("Bonjour" + studio_suffix(), [Resp("Bonjour !")])
+        self.assertIn("edit_studio", self.tool_names())
+        # The model reads the visible block, never the machine token.
+        seen = " ".join(c for _r, c in self.project.completions[0].messages)
+        self.assertIn("[CURRENT STUDIO", seen)
+        self.assertNotIn("owi:studio", seen)
+
+    def test_publish_before_decision_refused_once(self):
+        chunks = self.run_turn("Rajoute 2025" + studio_suffix(), [
+            Resp("", [call("c1", "publish_widget", kind="text", title="A", text="x")]),
+            Resp("", [call("c2", "publish_widget", kind="text", title="A", text="x")]),
+            Resp("Fait."),
+        ])
+        self.assertIn("Decide first: edit_studio", self.project.tool_outputs["c1"])
+        self.assertIn("published", self.project.tool_outputs["c2"])
+        ops = self.ws_ops(chunks)
+        self.assertEqual([o["op"] for o in ops], ["widget.add"])
+        self.assertNotIn("studio.continue", [o["op"] for o in ops])
+
+    def test_continue_then_publish_new_ids_only(self):
+        chunks = self.run_turn("Garde ce graphique et rajoute 2025" + studio_suffix(), [
+            Resp("", [call("c1", "edit_studio", mode="continue", remove=["w2", "zz"]),
+                      call("c2", "ask_revenue_expert", task="CA 2025 par region")]),
+            Resp("", [call("c3", "publish_widget", kind="text", title="2025",
+                           text="Le **Nord** mene."),
+                      call("c4", "publish_widget", kind="chart", title="CA 2025",
+                           result_id="s1q1", chart_type="bar", x="region",
+                           y=["revenue"])]),
+            Resp("J'ai complete le Studio (ajout de 2025)."),
+        ], {REVENUE_ID: REV_STREAM})
+        ops = self.ws_ops(chunks)
+        cont = [o for o in ops if o["op"] == "studio.continue"]
+        self.assertEqual(len(cont), 1)
+        self.assertEqual(cont[0]["remove"], ["w2"])
+        self.assertIn("Carried widgets kept", self.project.tool_outputs["c1"])
+        self.assertIn("w1, w3", self.project.tool_outputs["c1"])
+        widgets = [o["id"] for o in ops if o["op"] == "widget.add"]
+        self.assertEqual(widgets, ["w4", "w5"])        # never a carried id
+        self.assertIn("(8 widget(s) left)", self.project.tool_outputs["c4"])
+        self.assert_contract(ops)
+
+    def test_replaces_and_remove_after_continue(self):
+        chunks = self.run_turn("Remplace ce graphique" + studio_suffix(), [
+            Resp("", [call("c1", "edit_studio", mode="continue"),
+                      call("c2", "ask_revenue_expert", task="CA 2025 par region")]),
+            Resp("", [call("c3", "publish_widget", kind="chart", title="CA 2025",
+                           result_id="s1q1", chart_type="line", x="region",
+                           y=["revenue"], replaces="w1"),
+                      call("c4", "publish_widget", kind="text", title="X", text="x",
+                           replaces="w42"),
+                      call("c5", "edit_studio", mode="continue", remove=["w3", "w9"])]),
+            Resp("Fait."),
+        ], {REVENUE_ID: REV_STREAM})
+        ops = self.ws_ops(chunks)
+        add = [o for o in ops if o["op"] == "widget.add"]
+        self.assertEqual((add[0]["id"], add[0]["replaces"]), ("w4", "w1"))
+        self.assertIn("Unknown widget id to replace 'w42'",
+                      self.project.tool_outputs["c4"])
+        self.assertEqual([o["id"] for o in ops if o["op"] == "widget.remove"], ["w3"])
+        state = self.assert_contract(ops)
+        # Live reduce from an empty state: no carry here (the backend builds it).
+        self.assertEqual([w["id"] for w in state["widgets"]], ["w4"])
+
+    def test_full_board_continues_with_replaces_only(self):
+        full = ["w%d" % i for i in range(1, 13)]
+        chunks = self.run_turn("Remplace le titre" + studio_suffix(full), [
+            Resp("", [call("c1", "edit_studio", mode="continue")]),
+            Resp("", [call("c2", "publish_widget", kind="text", title="A", text="x"),
+                      call("c3", "publish_widget", kind="text", title="B", text="y",
+                           replaces="w12")]),
+            Resp("Fait."),
+        ])
+        out = self.project.tool_outputs
+        self.assertIn("Capacity left: 0 of 12", out["c1"])
+        self.assertIn("board is full", out["c2"])
+        self.assertIn("in place of w12", out["c3"])
+        add = [o for o in self.ws_ops(chunks) if o["op"] == "widget.add"]
+        self.assertEqual([(o["id"], o.get("replaces")) for o in add], [("w13", "w12")])
+
+    def test_new_mode_emits_nothing_and_frees_the_board(self):
+        chunks = self.run_turn("Nouvelle analyse des tickets" + studio_suffix(), [
+            Resp("", [call("c1", "edit_studio", mode="new")]),
+            Resp("", [call("c2", "publish_widget", kind="text", title="A", text="x"),
+                      call("c3", "edit_studio", mode="continue")]),
+            Resp("Le detail est dans un nouveau Studio."),
+        ])
+        ops = self.ws_ops(chunks)
+        self.assertEqual([o["op"] for o in ops], ["widget.add"])
+        self.assertEqual(ops[0]["id"], "w4")
+        self.assertIn("(11 widget(s) left)", self.project.tool_outputs["c2"])
+        self.assertIn("already started a NEW Studio", self.project.tool_outputs["c3"])
+
+    def test_no_token_means_no_decision_needed(self):
+        chunks = self.run_turn("x", [
+            Resp("", [call("c1", "edit_studio", mode="continue"),
+                      call("c2", "publish_widget", kind="text", title="A", text="x")]),
+            Resp("ok")])
+        self.assertIn("no CURRENT STUDIO", self.project.tool_outputs["c1"])
+        self.assertEqual(self.ws_ops(chunks)[0]["id"], "w1")
+
+    def test_prompt_treats_earlier_turns_as_grounded(self):
+        prompt = orch.PERSONA_DEFAULT
+        self.assertIn("EARLIER TURNS ARE GROUNDED", prompt)
+        self.assertIn("Never add a correction, a disclaimer or a doubt about a "
+                      "previous answer", prompt)
+        self.assertIn("only when a result of THIS turn actually contradicts one", prompt)
+        harness = open(os.path.join(_MIRROR_DIR, "dev-harness", "mock", "live",
+                                    "agents.mjs"), encoding="utf-8").read()
+        self.assertIn("EARLIER TURNS ARE GROUNDED", harness)
+        self.assertIn("Never add a correction, a disclaimer or a doubt about a "
+                      "previous answer", harness)
+        # The hub seed (which overrides the embedded persona in DSS) carries it too.
+        seed = open(os.path.join(_MIRROR_DIR, "project-library", "python", "owismind_hub",
+                                 "prompts", "orchestrator_persona.md"),
+                    encoding="utf-8").read()
+        self.assertIn("EARLIER TURNS ARE GROUNDED", seed)
+
+    def test_prompt_states_the_continuity_rules(self):
+        prompt = orch.PERSONA_DEFAULT
+        self.assertIn("# CURRENT STUDIO", prompt)
+        for needle in ("edit_studio", "CONTINUE", "NEW", "replaces", "remove",
+                       "never re-publish a carried one", "nouveau Studio",
+                       "J'ai complété le Studio", "recall_prior_result",
+                       "never compute a new one yourself", "3 to 6 lines",
+                       "size 'wide'", "role 'scope'"):
+            self.assertIn(needle, prompt, needle)
+
+
+class TestWorkspaceContinuityUnit(unittest.TestCase):
+    def test_ids_skip_carried_and_capacity_counts_them(self):
+        out = []
+        ws = orch._Workspace(["w2", "w7", "scope"])
+        ok, _msg = ws.continue_studio(out.append, ["scope"])
+        self.assertTrue(ok)
+        self.assertEqual(ws.carried, ["w2", "w7"])
+        self.assertEqual(ws.capacity_left(), 10)
+        wid = ws.add_widget(out.append, {"kind": "text", "title": "t", "text": "x"})
+        self.assertEqual(wid, "w8")
+        wid = ws.add_widget(out.append, {"kind": "text", "title": "t", "text": "x"},
+                            replaces="w2")
+        self.assertEqual((wid, ws.carried, ws.capacity_left()), ("w9", ["w7"], 9))
+        for op in [c["chunk"]["eventData"] for c in out]:
+            self.assertIsNotNone(ws_protocol.normalize_op(op), op)
+
+    def test_continue_refused_when_the_board_would_overflow(self):
+        out = []
+        ws = orch._Workspace(["w%d" % i for i in range(1, 12)])
+        ws.add_widget(out.append, {"kind": "text", "title": "t", "text": "x"})
+        ws.add_widget(out.append, {"kind": "text", "title": "t", "text": "y"})
+        ok, msg = ws.continue_studio(out.append)
+        self.assertFalse(ok)
+        self.assertIn("Board full: remove widgets or use mode new", msg)
+        self.assertNotIn("studio.continue", [c["chunk"]["eventData"]["op"] for c in out])
+        ok, _msg = ws.continue_studio(out.append, ["w1"])
+        self.assertTrue(ok)
+        self.assertEqual(out[-1]["chunk"]["eventData"]["remove"], ["w1"])
 
 
 if __name__ == "__main__":

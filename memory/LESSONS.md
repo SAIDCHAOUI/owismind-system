@@ -95,3 +95,7 @@
 - L151/L164/L171 Codex : projet trusted pour lire `.codex/config.toml`, `</dev/null`, `--write` pour editer.
 - L161/L174 Un test-double infidele au contrat reel cache des cassures : mocks = contrat reel.
 - L194 Ne jamais jeter des changements non commites.
+
+## Ajouts 2026-10-22
+- L197 Vue 3.5 : les watchers pre-flush d'UN composant s'executent dans l'ordre de DECLENCHEMENT, pas d'enregistrement (FIFO des jobs PRE de meme id). "Enregistre en premier, execute en premier" ne tient que si un seul ref declenche les deux. Echec : `openSession` faisait `sources.closePanel()` AVANT `activeSessionId = ...`, le replay du contexte de panneau rouvrait le Studio de l'ancien run dans la nouvelle conversation. Solution : ordonner les ecritures de store, prouver la course avec un test jetable qui pilote la sequence des watchers a la main. Preuve : confirme 2026-10-20 apres le tour de correction (memoire adversarial-reviewer). Date : 2026-10-22.
+- L198 Charte V2 : sur les ecrans V2 (`OWIsMind_PRD_V2_0/docs/CHARTE_V2_UI.md`, decision D1 2026-10-15) les rayons 2-8 px par tokens (`--r-pill`, `--r-lg`) PRIMENT sur le "carre absolu" de la charte V1.3 citee par la regle #10. Echec recurrent (MeasurePicker 10-20, SuggestionChips 10-22) : un dev re-met `border-radius: 0` en citant la charte V1.3, le panneau melange carre et 4 px. Solution : sur un fichier V2, comparer au composant voisin (`SourceChips`, `ui/Menu.vue`) ; les signaux oranges pulses (attente, barre d'insertion de drag) sont des SIGNAUX V2, pas de la decoration. Date : 2026-10-22.

@@ -16,3 +16,4 @@
 - [Boot race on exchanges.length](boot-race-exchanges-length.md) - /agents vs /conversation start together; exchanges=0 != empty conversation. Replay watchers with node_modules/vue
 - [Automating an action breaks its analytics](automating-an-action-breaks-its-analytics.md) - intent-named track() events change meaning silently; audit every call site
 - [A FLIP that animates width/height lies](flip-with-animated-size-lies.md) - invert from the ANCHORED edges, not top/left; + the rAF harness probe that proves first-frame jumps
+- [Studio auto-open review](studio-auto-open-review.md) - deferred replay hijacks an explicitly opened Studio; closeRight dismisses via shownKey; node:test replay recipe

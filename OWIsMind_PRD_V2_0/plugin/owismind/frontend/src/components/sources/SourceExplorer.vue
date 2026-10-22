@@ -1,15 +1,16 @@
 <script setup>
-// Source Data Explorer body - store-driven. Renders (top to bottom): ONE top row
+// Source Data Explorer body - store-driven. Renders (top to bottom): ONE top line
 // holding the dataset dropdown (hidden when there is a single source or the explorer
-// is embedded) and the Enter/button global search naming the dataset it searches,
-// then the user filter chips, then the surface itself. Used in the standalone SourcePanel
+// is embedded), the Enter/button global search naming the dataset it searches and the
+// user filter chips (they wrap under it once the search reaches its floor), then the
+// surface itself. Used in the standalone SourcePanel
 // (the pre-conversation empty screen; the Data|Analyze switch lives in ITS header to
 // save a body row) and, with `embedded`, inside the Evidence "Source data" tab (which
 // has no such header, so the switch renders inline there); it feeds the sources store,
 // so the host only has to ensureAgent() first.
 //
 // Two clean surfaces, one job each: DATA browses rows (search, filters, sort, cells),
-// ANALYZE computes (measures, result, and a preview of the rows behind them).
+// ANALYZE computes (measures, result, and the same rows table under them).
 // Everything that computes lives in SourceWorkspace - the Data view carries no figures.
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -82,8 +83,9 @@ watch(() => sources.q, (q) => {
   <div class="src-explorer">
     <!-- Dataset selector - only when the agent exposes more than one source AND the
          explorer is not embedded (the unified Evidence selector drives it there). -->
-    <!-- ONE top row (user ask 2026-08-13): the dataset dropdown, then the search taking
-         every remaining pixel. Wraps only when the dock is too narrow for both. The
+    <!-- ONE top line (user ask 2026-10-20): the dataset dropdown, the search, then the
+         filter chips. The search fills what the chips leave and shrinks as they arrive,
+         down to its floor; past it the chips block wraps to the next line. The
          `dataset` slot lets an EMBEDDED host (Evidence) put ITS OWN selector in the
          exact same spot, so both hosts keep an identical layout. -->
     <div class="src-topbar">
@@ -147,6 +149,11 @@ watch(() => sources.q, (q) => {
           @click="sources.setAnalyzeOpen(true)"
         ><Icon name="chart" />{{ t('src.view.analyze') }}</button>
       </div>
+
+      <!-- The filters, shared context of BOTH views, on the same line (no label: the
+           [+ Add a filter] control names itself). Outside the loading / error states,
+           like the surfaces below. -->
+      <SourceChips v-if="!sources.loading && !sources.error" />
     </div>
     <div v-if="oneChar" class="src-search-hint">{{ t('src.search.min') }}</div>
 
@@ -160,7 +167,6 @@ watch(() => sources.q, (q) => {
       <button type="button" @click="sources.reload()">{{ t('src.retry') }}</button>
     </div>
     <template v-else>
-      <SourceChips />
       <SourceTable v-if="!sources.analyzeOpen" />
       <!-- The Analyze workspace: measures + optional grouping, its result, and the rows
            behind it. Both explorer hosts drive the SOURCES store; the Evidence
@@ -173,8 +179,9 @@ watch(() => sources.q, (q) => {
 <style scoped>
 .src-explorer { display: flex; flex-direction: column; gap: var(--s-4); min-height: 0; }
 
-/* Top row: dataset dropdown (shared DatasetPick) + search, one line (the search takes
-   every remaining pixel), wrapping only when the dock is too narrow to hold both. */
+/* Top line: dataset dropdown (shared DatasetPick) + search + filter chips. Wrapping is
+   decided on the search's FLOOR (its basis), so the chips stay beside it until the
+   search would drop under 220px, then wrap below as one block (SourceChips). */
 .src-topbar { display: flex; align-items: center; flex-wrap: wrap; gap: var(--s-2) var(--s-3); }
 
 /* Data / Analyze segmented control (embedded host, rides the top row) - a 1px-bordered
@@ -201,13 +208,13 @@ watch(() => sources.q, (q) => {
   .src-viewseg-btn:hover:not(.active) :deep(.ui-icon) { transform: none; }
 }
 
-/* Search box - rounded, quiet border that wakes up on focus (premium 2026-08-13).
-   Rides the same top row as the dataset dropdown and claims the remaining width;
-   the flex-basis floor makes it wrap under the dropdown on a too-narrow dock.
+/* Search box - quiet border that wakes up on focus (premium 2026-08-13). Rides the top
+   line and claims the width the chips leave; its basis IS its floor (220px): the line
+   breaks before the search would go narrower, the chips wrapping under it instead.
    Same fixed 40px height as every top-row control (user ask 2026-08-13). */
 .src-search {
   display: flex; align-items: center; gap: var(--s-2);
-  flex: 1 1 220px; min-width: 0;
+  flex: 1 1 220px; min-width: 220px; max-width: 100%;
   height: 40px; box-sizing: border-box;
   border: 1px solid var(--border-strong); border-radius: var(--r-pill);
   background: var(--bg); padding: 0 10px;

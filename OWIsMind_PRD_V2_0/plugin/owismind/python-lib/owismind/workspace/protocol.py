@@ -9,10 +9,15 @@ every enum, pattern and cap below is identical.
 
 ``normalize_op(event_data, default_ts)`` turns ONE raw orchestrator ``eventData``
 into the normalized event ``{type: "workspace", v: 1, op, seq, ts, ...payload}`` or
-``None``. Fail-closed per operation: an invalid op is dropped (the caller logs it),
+``None``. ``studio.carry`` is backend-generated (Studio continuity): the agent stream
+can never send it (``normalize_op`` rejects it); the worker builds it from a validated
+base workspace and ``normalize_carry`` re-projects it for the reducer (it never
+carries ``suggest.set``: the next steps belong to an answer, not to the board).
+Fail-closed per operation: an invalid op is dropped (the caller logs it),
 never raises, the run continues. Projection rules (identical for every op):
   - unknown keys are removed; strings are stripped then truncated to their cap;
-  - enums (op, kind, status, chart type, tool, origin) come from a whitelist;
+  - enums (op, kind, status, chart type, tool, origin, size, role) come from a
+    whitelist;
   - integers reject booleans; ids are slugs ``^[a-z0-9_-]{1,32}$``;
   - a required field that is missing or invalid rejects the whole op; an invalid
     OPTIONAL field is simply dropped.
@@ -41,6 +46,12 @@ WIDGET_COMMENT_CHARS = 280
 WIDGET_TEXT_CHARS = 4000
 TASK_CHARS = 800
 MAX_Y_SERIES = 8
+# Studio continuity: at most this many base widget ids in studio.continue.remove.
+MAX_CARRY_REMOVE = 12
+# Next steps (suggest.set): at most this many items, each this long once stripped.
+SUGGESTIONS_MAX_ITEMS = 3
+SUGGESTION_MIN_CHARS = 8
+SUGGESTION_MAX_CHARS = 120
 
 CAPS = {
     "max_plan_steps": MAX_PLAN_STEPS,
@@ -58,6 +69,10 @@ CAPS = {
     "widget_text_chars": WIDGET_TEXT_CHARS,
     "task_chars": TASK_CHARS,
     "max_y_series": MAX_Y_SERIES,
+    "max_carry_remove": MAX_CARRY_REMOVE,
+    "suggestions_max_items": SUGGESTIONS_MAX_ITEMS,
+    "suggestion_min_chars": SUGGESTION_MIN_CHARS,
+    "suggestion_max_chars": SUGGESTION_MAX_CHARS,
 }
 
 # Field caps that live in the contract $defs (not in "caps").
@@ -70,7 +85,8 @@ KPI_COLUMN_CHARS = 128
 AGENT_KEY_CHARS = 64
 
 # --- Enums (mirror contract "enums") ------------------------------------------
-OPS = ("plan.set", "plan.step", "note.add", "widget.add", "prov.set")
+OPS = ("plan.set", "plan.step", "note.add", "widget.add", "prov.set", "studio.continue",
+       "widget.remove", "studio.carry", "suggest.set")
 PLAN_ORIGINS = ("model", "auto")
 STEP_STATUSES = ("todo", "running", "done", "error")
 NOTE_KINDS = ("plan", "find", "check", "note", "done")
@@ -81,6 +97,12 @@ CHART_STYLES = ("grouped", "stacked", "horizontal", "area", "smooth", "stepped",
 BINDINGS = ("explicit", "orphan")
 RUN_STATUSES = ("running", "done", "stopped", "error")
 TOOLS = ("semantic-model-query", "attribute_lookup", "correlate")
+# Layout hints. ``size`` is a width hint for the visuals that may need it (a long
+# time series, a wide table); ``role`` places a text widget: "section" (default)
+# sits on the board, "scope" is the analysis scope shown in the Studio header.
+WIDGET_SIZES = ("normal", "wide")
+SIZED_WIDGET_KINDS = ("chart", "table")
+TEXT_ROLES = ("section", "scope")
 
 ENUMS = {
     "ops": OPS,
@@ -93,16 +115,21 @@ ENUMS = {
     "bindings": BINDINGS,
     "run_statuses": RUN_STATUSES,
     "tools": TOOLS,
+    "widget_sizes": WIDGET_SIZES,
+    "text_roles": TEXT_ROLES,
 }
 
 # --- Patterns (mirror contract "patterns") ------------------------------------
 SQL_ID_PATTERN = r"^s[0-9]+(q|lk|qc)[0-9]+$"
 SLUG_PATTERN = r"^[a-z0-9_-]{1,32}$"
-PATTERNS = {"sql_id": SQL_ID_PATTERN, "slug": SLUG_PATTERN}
+EXCHANGE_ID_PATTERN = r"^[A-Za-z0-9_-]{1,128}$"
+PATTERNS = {"sql_id": SQL_ID_PATTERN, "slug": SLUG_PATTERN,
+            "exchange_id": EXCHANGE_ID_PATTERN}
 
 # fullmatch (not match): "$" would otherwise accept a trailing newline.
 _SQL_ID_RE = re.compile(SQL_ID_PATTERN[1:-1])
 _SLUG_RE = re.compile(SLUG_PATTERN[1:-1])
+_EXCHANGE_ID_RE = re.compile(EXCHANGE_ID_PATTERN[1:-1])
 # A sql_id is at most a few characters; bound before running the regex.
 _MAX_SQL_ID_CHARS = 32
 
@@ -126,6 +153,13 @@ def text(value, cap):
 def slug(value):
     """The value when it is a valid slug id, else None."""
     if isinstance(value, str) and _SLUG_RE.fullmatch(value):
+        return value
+    return None
+
+
+def exchange_id(value):
+    """The value when it is a valid exchange id (``^[A-Za-z0-9_-]{1,128}$``), else None."""
+    if isinstance(value, str) and _EXCHANGE_ID_RE.fullmatch(value):
         return value
     return None
 
@@ -272,12 +306,16 @@ def note_payload(raw):
 
 
 def widget_payload(raw):
-    """``{id, kind, title[, comment, step_id, sql_id, chart|kpi|text]}``.
+    """``{id, kind, title[, comment, step_id, sql_id, size, role, chart|kpi|text]}``.
 
     A data widget (chart / table / kpi) REQUIRES a valid ``sql_id`` (never a
     fallback to "the latest result"); a chart requires a valid chart spec, a KPI a
     valid kpi spec, a text widget a non-empty ``text``. ``binding`` is never taken
-    from the input: the reducer and the persistence step own it.
+    from the input: the reducer and the persistence step own it. Layout hints:
+    ``size`` is kept on a chart / table only, ``role`` on a text widget only; an
+    invalid or misplaced hint is dropped and the widget stays valid. ``origin`` (a
+    carried widget's owning exchange) is NEVER taken from here: only the backend
+    carry sets it.
     """
     widget_id = slug(raw.get("id"))
     kind = raw.get("kind")
@@ -297,6 +335,10 @@ def widget_payload(raw):
         out["sql_id"] = bound
     elif bound is not None:
         out["sql_id"] = bound
+    if kind in SIZED_WIDGET_KINDS and raw.get("size") in WIDGET_SIZES:
+        out["size"] = raw["size"]
+    if kind == "text" and raw.get("role") in TEXT_ROLES:
+        out["role"] = raw["role"]
     if kind == "chart":
         chart = chart_spec(raw.get("chart"))
         if chart is None:
@@ -313,6 +355,108 @@ def widget_payload(raw):
             return None
         out["text"] = body
     return out
+
+
+def widget_add_payload(raw):
+    """``widget_payload`` + the optional op attribute ``replaces`` (a widget id)."""
+    out = widget_payload(raw)
+    if out is None:
+        return None
+    replaces = slug(raw.get("replaces"))
+    if replaces is not None and replaces != out["id"]:
+        out["replaces"] = replaces
+    return out
+
+
+def id_list(value, cap):
+    """Unique valid slugs of a list, in order, at most ``cap`` (invalid ones dropped)."""
+    out = []
+    for item in value if isinstance(value, list) else []:
+        sid = slug(item)
+        if sid is not None and sid not in out:
+            out.append(sid)
+        if len(out) >= cap:
+            break
+    return out
+
+
+def studio_continue_payload(raw):
+    """``{[remove]}``: the base widget ids NOT carried (unknown ids are ignored later)."""
+    remove = id_list(raw.get("remove"), MAX_CARRY_REMOVE)
+    return {"remove": remove} if remove else {}
+
+
+def widget_remove_payload(raw):
+    """``{id}`` of the widget to drop from the board."""
+    widget_id = slug(raw.get("id"))
+    return {"id": widget_id} if widget_id is not None else None
+
+
+def carried_widget(raw):
+    """One carried widget: the widget projection (no step_id: the base plan is not
+    carried) + ``binding`` for a data widget + a REQUIRED valid ``origin``."""
+    if not isinstance(raw, dict):
+        return None
+    origin = exchange_id(raw.get("origin"))
+    widget = widget_payload(raw)
+    if widget is None or origin is None:
+        return None
+    widget.pop("step_id", None)
+    if widget["kind"] in DATA_WIDGET_KINDS:
+        binding = raw.get("binding")
+        widget["binding"] = binding if binding in BINDINGS else "explicit"
+    widget["origin"] = origin
+    return widget
+
+
+def studio_carry_payload(raw):
+    """``{base_exchange_id, widgets[]}``: unique ids, at most MAX_WIDGETS."""
+    base = exchange_id(raw.get("base_exchange_id"))
+    widgets_raw = raw.get("widgets")
+    if base is None or not isinstance(widgets_raw, list):
+        return None
+    widgets, seen = [], set()
+    for item in widgets_raw:
+        widget = carried_widget(item)
+        if widget is None or widget["id"] in seen:
+            continue
+        seen.add(widget["id"])
+        widgets.append(widget)
+        if len(widgets) >= MAX_WIDGETS:
+            break
+    return {"base_exchange_id": base, "widgets": widgets}
+
+
+def suggestion_items(value):
+    """The valid next-step texts of a list, in order, at most SUGGESTIONS_MAX_ITEMS.
+
+    Each item must be a string whose stripped length (code points) is within
+    [SUGGESTION_MIN_CHARS, SUGGESTION_MAX_CHARS]; an out-of-bounds item is DROPPED,
+    never truncated (a cut request would not be sendable as is). Duplicates are
+    removed case- and whitespace-insensitively (lowercased, whitespace runs
+    collapsed); the first occurrence wins and is kept as stripped. Not a list -> [].
+    """
+    out, seen = [], set()
+    for item in value if isinstance(value, list) else []:
+        if not isinstance(item, str):
+            continue
+        item = item.strip()
+        if not SUGGESTION_MIN_CHARS <= len(item) <= SUGGESTION_MAX_CHARS:
+            continue
+        key = " ".join(item.split()).lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(item)
+        if len(out) >= SUGGESTIONS_MAX_ITEMS:
+            break
+    return out
+
+
+def suggest_set_payload(raw):
+    """``{items[]}``: 1..SUGGESTIONS_MAX_ITEMS valid next steps, else None (op dropped)."""
+    items = suggestion_items(raw.get("items"))
+    return {"items": items} if items else None
 
 
 def prov_payload(raw):
@@ -339,9 +483,37 @@ _PAYLOAD_BY_OP = {
     "plan.set": plan_set_payload,
     "plan.step": plan_step_payload,
     "note.add": note_payload,
-    "widget.add": widget_payload,
+    "widget.add": widget_add_payload,
     "prov.set": prov_payload,
+    "studio.continue": studio_continue_payload,
+    "widget.remove": widget_remove_payload,
+    "suggest.set": suggest_set_payload,
 }
+
+
+def _normalize(event_data, default_ts, payload_by_op):
+    if not isinstance(event_data, dict):
+        return None
+    version = event_data.get("v")
+    if not is_int(version, 0) or version != PROTOCOL_VERSION:
+        return None
+    op = event_data.get("op")
+    if op not in payload_by_op:
+        return None
+    seq = event_data.get("seq")
+    if not is_int(seq, 1):
+        return None
+    payload = payload_by_op[op](event_data)
+    if payload is None:
+        return None
+    event = {"type": EVENT_TYPE, "v": PROTOCOL_VERSION, "op": op, "seq": seq}
+    ts = ts_value(event_data.get("ts"))
+    if ts is None:
+        ts = ts_value(default_ts)
+    if ts is not None:
+        event["ts"] = ts
+    event.update(payload)
+    return event
 
 
 def normalize_op(event_data, default_ts=None):
@@ -354,27 +526,18 @@ def normalize_op(event_data, default_ts=None):
     Pure, never raises.
     """
     try:
-        if not isinstance(event_data, dict):
-            return None
-        version = event_data.get("v")
-        if not is_int(version, 0) or version != PROTOCOL_VERSION:
-            return None
-        op = event_data.get("op")
-        if op not in _PAYLOAD_BY_OP:
-            return None
-        seq = event_data.get("seq")
-        if not is_int(seq, 1):
-            return None
-        payload = _PAYLOAD_BY_OP[op](event_data)
-        if payload is None:
-            return None
-        event = {"type": EVENT_TYPE, "v": PROTOCOL_VERSION, "op": op, "seq": seq}
-        ts = ts_value(event_data.get("ts"))
-        if ts is None:
-            ts = ts_value(default_ts)
-        if ts is not None:
-            event["ts"] = ts
-        event.update(payload)
-        return event
+        return _normalize(event_data, default_ts, _PAYLOAD_BY_OP)
     except Exception:  # pragma: no cover - defensive: never break the stream
+        return None
+
+
+_CARRY_PAYLOAD = {"studio.carry": studio_carry_payload}
+
+
+def normalize_carry(event_data, default_ts=None):
+    """The backend-built ``studio.carry`` event re-projected (same envelope rules as
+    ``normalize_op``), or None. Never fed by the agent stream. Pure, never raises."""
+    try:
+        return _normalize(event_data, default_ts, _CARRY_PAYLOAD)
+    except Exception:  # pragma: no cover - defensive
         return None

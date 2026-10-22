@@ -30,6 +30,7 @@ import { useEvidenceStore } from './evidence.js'
 import { useSourcesStore } from './sources.js'
 import { useScreenContextStore } from './screenContext.js'
 import { useWorkspaceStore } from './workspace.js'
+import { withStudioContext } from '../composables/workspaceModel.js'
 import { track } from '../services/track.js'
 
 // One session id per conversation (the backend stores it; history is scoped by user).
@@ -119,6 +120,9 @@ export const useChatStore = defineStore('chat', () => {
   // done single-text-block version carrying its feedback (L031) and tree links. The live
   // timeline is NOT persisted, so the answer is rebuilt as a single text block.
   function rowToExchange(r) {
+    // V2 next steps ("Go further" chips): /conversation carries them per row (absent
+    // when none), so every reloaded answer shows its chips without a per-exchange fetch.
+    if (r.exchange_id && r.suggestions) workspace.seedSuggestions(r.exchange_id, r.suggestions)
     const version = newVersion({
       timeline: r.assistant_text
         ? [{ id: 'txt-0', seq: 0, kind: 'text', text: r.assistant_text, open: false }]
@@ -162,6 +166,8 @@ export const useChatStore = defineStore('chat', () => {
 
   function newConversation() {
     cancelActive()
+    // A Studio open deferred for the left run must never resurface here.
+    workspace.clearDeferred()
     evidence.close()
     workspace.close()
     workspace.planEvent('restore')
@@ -232,6 +238,7 @@ export const useChatStore = defineStore('chat', () => {
   // the target conversation's rows arrive - no "new conversation" flash (mirror L031).
   async function openSession(sessionId) {
     cancelActive()
+    workspace.clearDeferred()
     evidence.close()
     workspace.close()
     sources.closePanel()
@@ -294,8 +301,10 @@ export const useChatStore = defineStore('chat', () => {
     // (not `id`) avoids a mid-stream remount/flicker when that reconciliation happens.
     const exch = reactive({ uid: nextStamp(), id: null, parentId: parentId || null, userText, agentKey: session.selectedAgentKey, version, createdAt: nextStamp() })
     exchanges.value.push(exch)
+    // The Studio on screen BEFORE this run's entry exists (screen_context below).
+    const studioId = workspace.studioExchangeId()
     // V2 workspace: the run's live entry (plan / journal / dashboard), fed from onEvent.
-    workspace.beginLive(exch.uid)
+    workspace.beginLive(exch.uid, activeSessionId.value)
     // Keep the freshly created branch active: drop any override pinned at this parent.
     const parentKey = parentId || '__root__'
     if (overrides.value[parentKey] != null) {
@@ -340,9 +349,12 @@ export const useChatStore = defineStore('chat', () => {
     // full-transparency "context shared with this message" detail; the backend persists it
     // (chat_v5.screen_ctx) so a reload rebuilds the same line via screenCtxFromRow.
     version.screenCtx = sourceState || null
-    const screenContext = (evidence.open && evidence.exchangeId)
+    // V2: the sealed Studio on screen rides along as `studio_exchange_id` (a pointer
+    // only: the backend validates it and reads the Studio itself), so the agent can
+    // continue it ("add a chart below") instead of starting a new one.
+    const screenContext = withStudioContext((evidence.open && evidence.exchangeId)
       ? { open: true, exchange_id: evidence.exchangeId, active_tab: evidence.activeTab, ...(sourceState ? { source_state: sourceState } : {}) }
-      : (sourceState ? { open: false, source_state: sourceState } : undefined)
+      : (sourceState ? { open: false, source_state: sourceState } : undefined), studioId)
     if (sourceState) {
       // Analytics only: never the content, never the q text (privacy).
       track('screen_context_included', {
@@ -383,10 +395,11 @@ export const useChatStore = defineStore('chat', () => {
       // parsed filters) - never a degraded auto-open. Not on stopped/error.
       // V2: a run that built a workspace keeps the right column on it (the workspace
       // store switches to the dashboard and loads the stored document) - no proof-panel
-      // reveal on top of it. Not on a cancelled run (another conversation owns the screen).
+      // reveal on top of it. Not on a cancelled run (another conversation owns the screen),
+      // nor while a Studio is on screen: a chat-only answer never replaces it.
       const builtWorkspace = workspace.hasContent(exch.id, exch.uid)
       if (builtWorkspace) exch.hasWorkspace = true
-      if (!token.cancelled && !builtWorkspace && version.status === 'done' && version.sql.some((q) => q && q.success)) {
+      if (!token.cancelled && !builtWorkspace && !workspace.open && version.status === 'done' && version.sql.some((q) => q && q.success)) {
         // Fire-and-forget: the reveal must never affect the send flow. The
         // store catches its own fetch errors; this guards the commit path too.
         Promise.resolve(evidence.openForExchange(exch.id, { auto: true })).catch(() => {})

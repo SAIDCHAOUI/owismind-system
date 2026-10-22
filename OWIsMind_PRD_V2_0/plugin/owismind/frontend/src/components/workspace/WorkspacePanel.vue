@@ -1,7 +1,11 @@
 <script setup>
 // Studio (V2) - the floating right-hand card of an answer that built a workspace:
-// header (name + run status), TWO tabs (Dashboard, always first, and Data) and the
-// "where does this data come from" drawer. The plan lives above the prompt
+// ONE header row with two zones: on the left, the name + run status with the TWO tabs
+// right under them (Dashboard, always first, and Data); on the right, the analysis
+// scope the agent published (WorkspaceScope) taking the remaining width, then the
+// close button. Then the body and the "where does this data come from" drawer.
+// While the run works and no board widget is published yet, the body shows the
+// waiting composition (StudioWaiting) instead of an empty board. The plan lives above the prompt
 // (PlanCard). All state lives in the workspace store; the Data tab hosts the V1.3
 // Evidence panel in its embedded mode and loads it for THIS exchange on first visit.
 import { computed, watch } from 'vue'
@@ -12,7 +16,11 @@ import { Icon } from '../ui'
 import BoardGrid from './BoardGrid.vue'
 import ProvenanceDrawer from './ProvenanceDrawer.vue'
 import DataFocus from './DataFocus.vue'
+import WidgetFocus from './WidgetFocus.vue'
+import WorkspaceScope from './WorkspaceScope.vue'
+import StudioWaiting from './StudioWaiting.vue'
 import EvidencePanel from '../evidence/EvidencePanel.vue'
+import { dataTabView, resultHasRows } from '../../composables/workspaceModel.js'
 
 const { t } = useI18n()
 const ws = useWorkspaceStore()
@@ -28,10 +36,26 @@ const statusLabel = computed(() => {
   return t('ws.status.' + (s === 'stopped' || s === 'error' ? s : 'done'))
 })
 
+// Waiting composition: a live run on the Dashboard tab with no board widget yet (or
+// the shown answer still loading during a run). The first widget replaces it; a run
+// that ends with nothing falls back to the board's empty state.
+const waiting = computed(() => {
+  const e = entry.value
+  if (!running.value || !e || e.error || ws.activeTab !== 'board') return false
+  return !!e.loading || !ws.boardList.length
+})
+// The plan step running now, read by the waiting line (null: none known).
+const liveStep = computed(() => {
+  const steps = (state.value && state.value.plan && state.value.plan.steps) || []
+  const s = steps.find((x) => x && x.status === 'running' && x.label)
+  return s ? String(s.label) : null
+})
+
+// The board counts its own widgets (the scope lives in the header).
 const tabs = computed(() => {
-  const s = state.value
+  const n = ws.boardList.length
   return [
-    { key: 'board', label: t('ws.tab.board'), count: s && s.widgets.length ? s.widgets.length : null },
+    { key: 'board', label: t('ws.tab.board'), count: n || null },
     { key: 'data', label: t('ws.tab.data'), count: null },
   ]
 })
@@ -41,31 +65,59 @@ const tabs = computed(() => {
 // no exchange id until /chat/start answers, and nothing is stored before the run ends.
 // With a sql_id focus (a widget's "See the data"), the Evidence view is scoped to
 // THAT query (multi-SQL Evidence, /evidence/meta?sql_id=).
+// A result carried from an earlier answer (continued Studio) is read on ITS answer:
+// the Evidence view then loads for the widget's origin exchange (ws.dataExchangeId),
+// which is sealed, so it opens even while this run is live.
 function syncEvidence() {
   if (ws.activeTab !== 'data' || !ws.open) return
-  const id = ws.exchangeId
-  if (!id || running.value) return
+  const id = ws.dataExchangeId
+  if (!id || (running.value && !ws.dataOrigin)) return
   const want = ws.dataSqlId || null
   if (evidence.open && evidence.exchangeId === id && (!want || evidence.requestedSqlId === want)) return
   evidence.openForExchange(id, want ? { sqlId: want } : undefined)
 }
-watch(() => [ws.activeTab, ws.exchangeId, ws.open, running.value, ws.dataSqlId], syncEvidence, { immediate: true })
-// Leaving the focus ("all the answer's data") returns to the default view.
-watch(() => ws.dataSqlId, (now, before) => {
-  if (!now && before && evidence.open && evidence.exchangeId === ws.exchangeId && evidence.requestedSqlId) {
-    evidence.openForExchange(ws.exchangeId)
+watch(() => [ws.activeTab, ws.exchangeId, ws.open, running.value, ws.dataSqlId, ws.dataOrigin], syncEvidence, { immediate: true })
+// Leaving the focus ("all the answer's data") returns to the default view of the
+// shown answer (also when the focus was a carried result of another answer).
+watch(() => [ws.dataSqlId, ws.dataOrigin, ws.exchangeId], ([now, , id], [before, beforeOrigin, idBefore]) => {
+  if (now || !before || id !== idBefore || !evidence.open) return
+  if (evidence.exchangeId !== (beforeOrigin || id)) return
+  // From a carried result: syncEvidence reloads the shown answer's view (sealed run);
+  // a live run has no Evidence yet, so the origin's view is simply closed.
+  if (beforeOrigin) {
+    if (running.value) evidence.close()
+  } else if (evidence.requestedSqlId) {
+    evidence.openForExchange(id)
   }
 })
 // The selector inside the Data tab moves the focus along (no reload loop: the store
-// already holds the picked query).
+// already holds the picked query), on the exchange it shows.
 watch(() => evidence.requestedSqlId, (sid) => {
-  if (sid && ws.dataSqlId && sid !== ws.dataSqlId && evidence.exchangeId === ws.exchangeId) ws.openData(sid)
+  if (sid && ws.dataSqlId && sid !== ws.dataSqlId && evidence.exchangeId === ws.dataExchangeId) ws.openData(sid, null, ws.dataOrigin)
 })
-// The server did not scope the view to the focused query (older backend: no
-// meta.sql_id): the exact rows of THAT query are shown instead (never another one's).
-const unscopedFocus = computed(() =>
-  !!ws.dataSqlId && !!evidence.meta && !evidence.loading && evidence.activeSqlId !== ws.dataSqlId,
-)
+// What the Data tab shows (dataTabView): the Studio's own rows of ONE result when the
+// server did not scope the Evidence view to the focused query (older backend: no
+// meta.sql_id), or when the Evidence view is degraded (e.g. no_matching_dataset) while
+// the Studio holds the rows captured during the run; otherwise the Evidence panel.
+// A degraded meta only counts when it belongs to THIS exchange.
+const dataView = computed(() => {
+  const sameExchange = !!ws.dataExchangeId && evidence.exchangeId === ws.dataExchangeId
+  const meta = evidence.meta && (sameExchange || evidence.meta.available !== false) ? evidence.meta : null
+  // Fallback candidates (no focus) are the shown answer's own results only: a carried
+  // widget's sql_id names a query of another exchange.
+  const widgets = ((state.value && state.value.widgets) || []).filter((w) => !w.origin)
+  return dataTabView({
+    focusSqlId: ws.dataSqlId,
+    meta,
+    loading: evidence.loading,
+    activeSqlId: evidence.activeSqlId,
+    candidates: widgets.map((w) => w.sql_id).filter(Boolean),
+    hasRows: (sid) => {
+      const info = ws.sqlInfo(sid, sid === ws.dataSqlId ? ws.dataOrigin : null)
+      return !!info && resultHasRows(info.result)
+    },
+  })
+})
 
 // Clicking the Data tab itself shows the whole answer's data (no sql_id focus).
 function onTab(key) {
@@ -91,41 +143,45 @@ function onTabKey(e, i) {
   <aside class="ws-panel" :aria-label="t('ws.title')">
     <header class="ws-head">
       <div class="ws-head-row">
-        <div class="ws-titles">
-          <span class="ws-title">{{ t('ws.title') }}</span>
-          <span class="ws-sub">
-            <span v-if="running" class="ws-live" aria-hidden="true" />
-            {{ statusLabel }}
-          </span>
+        <div class="ws-left">
+          <div class="ws-titles">
+            <span class="ws-title">{{ t('ws.title') }}</span>
+            <span class="ws-sub">
+              <span v-if="running" class="ws-live" aria-hidden="true" />
+              {{ statusLabel }}
+            </span>
+          </div>
+          <div class="ws-tabs" role="tablist">
+            <button
+              v-for="(tab, i) in tabs"
+              :key="tab.key"
+              type="button"
+              role="tab"
+              class="ws-tab"
+              :class="{ active: ws.activeTab === tab.key }"
+              :aria-selected="ws.activeTab === tab.key"
+              :tabindex="ws.activeTab === tab.key ? 0 : -1"
+              @click="onTab(tab.key)"
+              @keydown="onTabKey($event, i)"
+            >
+              <span class="ws-tab-label">{{ tab.label }}</span>
+              <span v-if="tab.count != null" class="ws-tab-count mono">{{ tab.count }}</span>
+              <span v-if="ws.fresh[tab.key]" class="ws-tab-new">
+                <span class="ws-dot" aria-hidden="true" />{{ t('ws.new') }}
+              </span>
+            </button>
+          </div>
         </div>
-        <button type="button" class="ws-icon-btn" :title="t('ws.close')" :aria-label="t('ws.close')" @click="ws.close()">
+        <WorkspaceScope v-if="ws.scope && !(entry && entry.loading)" :key="ws.scope.id" class="ws-scope" :widget="ws.scope" />
+        <button type="button" class="ws-icon-btn ws-close" :title="t('ws.close')" :aria-label="t('ws.close')" @click="ws.close({ byUser: true })">
           <Icon name="x" />
-        </button>
-      </div>
-      <div class="ws-tabs" role="tablist">
-        <button
-          v-for="(tab, i) in tabs"
-          :key="tab.key"
-          type="button"
-          role="tab"
-          class="ws-tab"
-          :class="{ active: ws.activeTab === tab.key }"
-          :aria-selected="ws.activeTab === tab.key"
-          :tabindex="ws.activeTab === tab.key ? 0 : -1"
-          @click="onTab(tab.key)"
-          @keydown="onTabKey($event, i)"
-        >
-          <span class="ws-tab-label">{{ tab.label }}</span>
-          <span v-if="tab.count != null" class="ws-tab-count mono">{{ tab.count }}</span>
-          <span v-if="ws.fresh[tab.key]" class="ws-tab-new">
-            <span class="ws-dot" aria-hidden="true" />{{ t('ws.new') }}
-          </span>
         </button>
       </div>
     </header>
 
-    <div class="ws-body" :class="{ 'ws-body--data': ws.activeTab === 'data' }" role="tabpanel">
-      <div v-if="entry && entry.loading" class="ws-skeleton" :aria-label="t('ws.loading')">
+    <div class="ws-body" :class="{ 'ws-body--data': ws.activeTab === 'data', 'ws-body--wait': waiting }" role="tabpanel">
+      <StudioWaiting v-if="waiting" :step="liveStep" />
+      <div v-else-if="entry && entry.loading" class="ws-skeleton" :aria-label="t('ws.loading')">
         <span class="sk sk-line" />
         <span class="sk sk-line short" />
         <span class="sk sk-block" />
@@ -135,12 +191,18 @@ function onTabKey(e, i) {
         <BoardGrid v-if="ws.activeTab === 'board'" :state="state" :running="running" />
         <!-- Data tab: ONE result when opened from a widget (sql_id focus), else the
              exchange-level Evidence view. -->
-        <DataFocus v-else-if="ws.activeTab === 'data' && unscopedFocus" />
+        <DataFocus
+          v-else-if="ws.activeTab === 'data' && dataView.mode === 'focus'"
+          :sql-id="dataView.sqlId"
+          :unverified="dataView.unverified"
+        />
         <EvidencePanel v-else-if="ws.activeTab === 'data'" embedded />
       </template>
     </div>
 
     <ProvenanceDrawer v-if="ws.drawerSqlId" />
+    <!-- Focus level of one widget (teleported above the whole app). -->
+    <WidgetFocus v-if="ws.focusWidgetId && ws.activeTab === 'board'" />
   </aside>
 </template>
 
@@ -164,21 +226,43 @@ function onTabKey(e, i) {
 .ws-head {
   flex: 0 0 auto;
   border-bottom: 1px solid var(--border);
+  container-type: inline-size;
 }
-/* Same height as the chat top bar (56px) so both hairlines meet as one line. */
+/* ONE row, two zones. Left: a single column (name + status, the tabs right under
+   them, never spreading under the scope). Right: the analysis scope (when published)
+   takes the remaining width, centred on the left column, then the close button.
+   Without a scope the middle track is simply empty (no extra height). */
 .ws-head-row {
-  height: 56px;
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas: 'left scope close';
   align-items: center;
-  gap: var(--s-3);
-  padding: 0 var(--s-3) 0 var(--s-5);
+  column-gap: var(--s-5);
+  padding: 10px var(--s-3) 10px var(--s-5);
+}
+.ws-left {
+  grid-area: left;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
 }
 .ws-titles {
   display: flex;
   flex-direction: column;
   gap: 3px;
-  flex: 1 1 auto;
   min-width: 0;
+}
+.ws-scope { grid-area: scope; }
+.ws-close { grid-area: close; align-self: start; justify-self: end; }
+/* Narrow Studio: the scope stacks under the left zone, across the full width. */
+@container (max-width: 899px) {
+  .ws-head-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: 'left close' 'scope scope';
+    row-gap: var(--s-3);
+  }
+  .ws-head-row .ws-scope { padding-left: 0; border-left: none; }
 }
 .ws-title {
   font-size: var(--fs-sm);
@@ -226,7 +310,6 @@ function onTabKey(e, i) {
 .ws-tabs {
   display: flex;
   gap: 6px;
-  padding: 10px var(--s-4);
   overflow-x: auto;
 }
 .ws-tab {
@@ -274,6 +357,12 @@ function onTabKey(e, i) {
   min-height: 0;
   overflow-y: auto;
   padding: var(--s-5);
+}
+/* Waiting composition: a column it fills entirely (StudioWaiting is a size container). */
+.ws-body--wait {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 /* Data tab: the embedded Evidence panel owns its own scroll regions. */
 .ws-body--data {

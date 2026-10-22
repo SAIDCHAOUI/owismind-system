@@ -66,3 +66,14 @@ machine) : vérifié par rendu SSR de AppLayout + vrais stores contre le simulat
 - Le réducteur JS est le miroir de `python-lib/owismind/workspace/reducer.py`, épinglé par `contracts/fixtures/*` (lecture seule).
 - Vérification sans navigateur : bundles Node du scratchpad (`hooks.mjs` + `reg.mjs` : compilation SFC SSR, stubs DOM), voir `layout.mjs`, `chatflow.mjs`. Lancer avec `node --import <scratchpad>/reg.mjs <script>` depuis `frontend/`.
 - Gates : `cd frontend && node --test test/*.test.js` ; build `./node_modules/.bin/vite build --outDir <scratchpad>/owi_bc --emptyOutDir` puis `rm -rf` (jamais dans `resource/`).
+
+## Apres la phase 2 : chantier du 17 au 22 octobre 2026 (commit de session 2026-10-22)
+
+Resume dans `memory/sessions/2026-10-22.md`. En bref : continuite du Studio (continuer / nouveau,
+`studio.continue` -> `studio.carry`, `widget.remove`, `replaces`, `origin` / `orphan`), suggestions de
+suite (`suggest.set`, `chat/SuggestionChips.vue`), langue de reponse = langue du dernier message
+utilisateur, Studio UI (auto-open, `StudioWaiting.vue`, `WidgetFocus.vue`, `WorkspaceScope.vue`,
+ordre par glisser-deposer, en-tete titre + onglets sur une ligne ~90 px), simulateur en mode `live`
+(Claude Haiku 5.5 sur sqlite synthetique) et `stub` (`dev-harness/README.md`).
+Tests au commit : front 606, backend plugin 1101, agents 889, tous OK. Pas encore vu par l'utilisateur.
+Derive doc connue : `CHARTE_V2_UI.md` section 3 dit encore "en-tete 56 px".

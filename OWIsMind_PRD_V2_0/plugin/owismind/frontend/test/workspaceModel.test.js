@@ -9,11 +9,12 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   CAPS, OPS, PLAN_ORIGINS, STEP_STATUSES, NOTE_KINDS, WIDGET_KINDS, CHART_TYPES,
-  CHART_STYLES, BINDINGS, RUN_STATUSES, TOOLS, SQL_ID_RE, SLUG_RE, PROTOCOL_VERSION,
+  CHART_STYLES, BINDINGS, RUN_STATUSES, TOOLS, WIDGET_SIZES, TEXT_ROLES, SQL_ID_RE, SLUG_RE, PROTOCOL_VERSION,
   normalizeWorkspaceOp, applyWorkspaceEvent, reduceWorkspace, emptyWorkspace,
   finalizeWorkspace, sanitizeWorkspace, hasWorkspaceContent, planProgress,
   stepsWithProgress, journalGroups, widgetsByStep, boardLayout, stepFor,
-  provenanceFor, chartSpecForArtifact,
+  provenanceFor, chartSpecForArtifact, EXCHANGE_ID_RE, normalizeCarryOp, resultRef,
+  sameResult, studioContextId, withStudioContext,
 } from '../src/composables/workspaceModel.js'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
@@ -31,11 +32,13 @@ test('constants mirror the contract file (version, caps, enums, patterns)', () =
     ops: OPS, plan_origins: PLAN_ORIGINS, step_statuses: STEP_STATUSES, note_kinds: NOTE_KINDS,
     widget_kinds: WIDGET_KINDS, chart_types: CHART_TYPES, chart_styles: CHART_STYLES,
     bindings: BINDINGS, run_statuses: RUN_STATUSES, tools: TOOLS,
+    widget_sizes: WIDGET_SIZES, text_roles: TEXT_ROLES,
   }
   for (const [k, v] of Object.entries(contract.enums)) assert.deepEqual([...enums[k]], v, 'enum ' + k)
   assert.deepEqual(Object.keys(enums).sort(), Object.keys(contract.enums).sort())
   assert.equal(SQL_ID_RE.source, contract.patterns.sql_id)
   assert.equal(SLUG_RE.source, contract.patterns.slug)
+  assert.equal(EXCHANGE_ID_RE.source, contract.patterns.exchange_id)
 })
 
 // --- shared fixtures ------------------------------------------------------------------
@@ -179,6 +182,40 @@ test('a data widget without sql_id never enters the state (decision D2)', () => 
 
 import { dataFocus, filterParts } from '../src/composables/workspaceModel.js'
 
+test('layout hints: size kept on chart / table, role on text, invalid values dropped', () => {
+  const chart = { type: 'bar', x: 'a', y: ['b'] }
+  const op = (seq, w) => ({ v: PROTOCOL_VERSION, op: 'widget.add', seq, ...w })
+  const s = reduceWorkspace([
+    op(1, { id: 'c1', kind: 'chart', title: 'C', sql_id: 's1q1', chart, size: 'wide' }),
+    op(2, { id: 'tb', kind: 'table', title: 'T', sql_id: 's1q1', size: 'normal' }),
+    op(3, { id: 'c2', kind: 'chart', title: 'C2', sql_id: 's1q1', chart, size: 'huge', role: 'scope' }),
+    op(4, { id: 'k1', kind: 'kpi', title: 'K', sql_id: 's1q1', kpi: { label: 'K', value: 'v' }, size: 'wide' }),
+    op(5, { id: 'sc', kind: 'text', title: 'Scope', text: 'x', role: 'scope', size: 'wide' }),
+    op(6, { id: 'tx', kind: 'text', title: 'Sec', text: 'y', role: 'summary' }),
+    op(7, { id: 'old', kind: 'text', title: 'Old', text: 'z' }),
+  ])
+  const by = Object.fromEntries(s.widgets.map((w) => [w.id, w]))
+  assert.equal(by.c1.size, 'wide')
+  assert.equal(by.tb.size, 'normal')
+  assert.equal('size' in by.c2, false)
+  assert.equal('role' in by.c2, false)
+  assert.equal('size' in by.k1, false)
+  assert.equal(by.sc.role, 'scope')
+  assert.equal('size' in by.sc, false)
+  assert.equal('role' in by.tx, false)
+  assert.equal('role' in by.old, false)
+  // A stored document keeps the valid hints and drops the rest (same rules).
+  const doc = JSON.parse(JSON.stringify({ ...s, v: PROTOCOL_VERSION }))
+  doc.widgets.find((w) => w.id === 'tx').role = 'section'
+  doc.widgets.find((w) => w.id === 'old').size = 'wide'
+  const back = sanitizeWorkspace(doc)
+  const b = Object.fromEntries(back.widgets.map((w) => [w.id, w]))
+  assert.equal(b.c1.size, 'wide')
+  assert.equal(b.sc.role, 'scope')
+  assert.equal(b.tx.role, 'section')
+  assert.equal('size' in b.old, false)
+})
+
 test('dataFocus: the widget opened from, else the first widget on that sql_id', () => {
   const s = reduceWorkspace([
     PLAN,
@@ -221,4 +258,192 @@ test('plain labels: expert names and result names, never an id', () => {
   assert.equal(resultLabel({ widgets: [], stepLabel: 'Incidents ouverts' }), 'Incidents ouverts')
   assert.equal(resultLabel({ widgets: [] }), null)
   assert.equal(resultLabel(null), null)
+})
+
+// --- Studio panel decisions ---------------------------------------------------------
+
+import { studioShouldOpen, studioCloseEffect, dataTabView } from '../src/composables/workspaceModel.js'
+
+test('studioShouldOpen: first widget opens, then never again unless re-armed; dismissed always blocks', () => {
+  // First published widget of the run.
+  assert.equal(studioShouldOpen({ armed: true, dismissed: false, onScreen: false, widgets: 1 }), true)
+  // Already opened for this run (disarmed): later widgets only appear on the board.
+  assert.equal(studioShouldOpen({ armed: false, dismissed: false, onScreen: false, widgets: 2 }), false)
+  // The user closed it during the run.
+  assert.equal(studioShouldOpen({ armed: true, dismissed: true, onScreen: false, widgets: 3 }), false)
+  // Already showing this run, or nothing to show.
+  assert.equal(studioShouldOpen({ armed: true, dismissed: false, onScreen: true, widgets: 1 }), false)
+  assert.equal(studioShouldOpen({ armed: true, dismissed: false, onScreen: false, widgets: 0 }), false)
+  assert.equal(studioShouldOpen(null), false)
+})
+
+test('studioCloseEffect: only an explicit user close is sticky for a live run', () => {
+  assert.equal(studioCloseEffect({ running: true, byUser: true }), 'dismiss')
+  assert.equal(studioCloseEffect({ running: true, byUser: false }), 'rearm')
+  assert.equal(studioCloseEffect({ running: true }), 'rearm')
+  assert.equal(studioCloseEffect({ running: false, byUser: true }), null)
+  assert.equal(studioCloseEffect(null), null)
+})
+
+test('dataTabView: degraded meta falls back to the rows the Studio captured', () => {
+  const rows = new Set(['s1q1', 's2q1'])
+  const hasRows = (sid) => rows.has(sid)
+  const degraded = { available: false, reason: 'no_matching_dataset', sql_id: 's1q1' }
+  // Focused on a result whose rows the Studio holds: the rows, flagged unverified.
+  assert.deepEqual(
+    dataTabView({ focusSqlId: 's1q1', meta: degraded, activeSqlId: 's1q1', hasRows }),
+    { mode: 'focus', sqlId: 's1q1', unverified: true },
+  )
+  // Focused, degraded, no captured rows: the Evidence panel keeps its honest message.
+  assert.equal(dataTabView({ focusSqlId: 's9q9', meta: degraded, activeSqlId: 's9q9', hasRows }).mode, 'evidence')
+  // No focus (Data tab clicked): the active result's rows, else the first with rows.
+  assert.deepEqual(
+    dataTabView({ meta: degraded, activeSqlId: 's2q1', candidates: ['s1q1', 's2q1'], hasRows }),
+    { mode: 'focus', sqlId: 's2q1', unverified: true },
+  )
+  assert.deepEqual(
+    dataTabView({ meta: { available: false }, activeSqlId: null, candidates: ['s3q1', 's1q1'], hasRows }),
+    { mode: 'focus', sqlId: 's1q1', unverified: true },
+  )
+  assert.equal(dataTabView({ meta: degraded, activeSqlId: 's9q9', candidates: [], hasRows }).mode, 'evidence')
+})
+
+test('dataTabView: available meta keeps the previous behaviour (unscoped focus only)', () => {
+  const hasRows = () => true
+  const scoped = { available: true, sql_id: 's1q1' }
+  assert.equal(dataTabView({ focusSqlId: 's1q1', meta: scoped, activeSqlId: 's1q1', hasRows }).mode, 'evidence')
+  // Older backend: the view is not scoped to the focused query.
+  assert.deepEqual(
+    dataTabView({ focusSqlId: 's2q1', meta: { available: true }, activeSqlId: null, hasRows }),
+    { mode: 'focus', sqlId: 's2q1', unverified: false },
+  )
+  assert.equal(dataTabView({ meta: scoped, activeSqlId: 's1q1', hasRows }).mode, 'evidence')
+  // Meta unknown or loading: the Evidence panel (and its skeleton) decides.
+  assert.equal(dataTabView({ focusSqlId: 's1q1', meta: null, hasRows }).mode, 'evidence')
+  assert.equal(dataTabView({ focusSqlId: 's1q1', meta: scoped, loading: true, hasRows }).mode, 'evidence')
+})
+
+import { resultHasRows } from '../src/composables/workspaceModel.js'
+
+test('resultHasRows: an empty capture is no data (the Data tab keeps the Evidence panel)', () => {
+  assert.equal(resultHasRows({ captured: true, columns: ['a'], rows: [[1]] }), true)
+  assert.equal(resultHasRows({ captured: true, columns: ['a'], rows: [] }), false)
+  assert.equal(resultHasRows({ captured: true, columns: ['a'] }), false)
+  assert.equal(resultHasRows(null), false)
+  const hasRows = (sid) => resultHasRows({ s1q1: { rows: [] } }[sid])
+  assert.equal(dataTabView({ focusSqlId: 's1q1', meta: { available: false }, activeSqlId: 's1q1', hasRows }).mode, 'evidence')
+})
+
+// --- Studio continuity (studio.continue / studio.carry / widget.remove / replaces) ----
+
+const CONTINUITY = readJson(resolve(FIXTURES, 'workspace_continuity_cases.json'))
+
+test('continuity normalization cases (protocol.normalize_op parity)', () => {
+  assert.ok(CONTINUITY.normalize_cases.length > 0)
+  for (const c of CONTINUITY.normalize_cases) {
+    assert.deepEqual(normalizeWorkspaceOp(c.input, c.default_ts), c.expected, c.name)
+  }
+})
+
+test('continuity reducer cases (reducer parity: carry, remove, replaces, summary skip)', () => {
+  assert.ok(CONTINUITY.reducer_cases.length > 0)
+  for (const c of CONTINUITY.reducer_cases) assert.deepEqual(reduceWorkspace(c.events), c.expected, c.name)
+})
+
+const CARRY = {
+  type: 'workspace', v: 1, op: 'studio.carry', seq: 1, base_exchange_id: 'ex-a',
+  widgets: [
+    { id: 'w1', kind: 'chart', title: 'CA', step_id: 'p1', sql_id: 's1q1', chart: { type: 'line', x: 'm', y: ['v'] }, size: 'wide', origin: 'ex-a', binding: 'explicit' },
+    { id: 's1', kind: 'text', title: 'Scope', text: 'Perimetre', role: 'scope', origin: 'ex-a' },
+  ],
+}
+
+test('a carry prepends the base widgets (origin kept, step dropped) before this run and sets the base', () => {
+  const own = { type: 'workspace', v: 1, op: 'widget.add', seq: 2, id: 'w3', kind: 'chart', title: '2025', sql_id: 's1q1', chart: { type: 'bar', x: 'm', y: ['v'] } }
+  const st = reduceWorkspace([CARRY, own])
+  assert.equal(st.base_exchange_id, 'ex-a')
+  assert.deepEqual(st.widgets.map((w) => [w.id, w.origin || null]), [['w1', 'ex-a'], ['s1', 'ex-a'], ['w3', null]])
+  assert.equal(st.widgets[0].step_id, undefined)
+  assert.equal(st.widgets[0].size, 'wide')
+  // Only THIS run's s1q1 is in the summary (the carried one belongs to ex-a).
+  assert.deepEqual(st.summary.sql_ids, ['s1q1'])
+  // The carry never goes through the agent-stream normalizer.
+  assert.equal(normalizeWorkspaceOp(CARRY), null)
+  assert.equal(normalizeCarryOp(CARRY).widgets.length, 2)
+  assert.equal(normalizeCarryOp({ ...CARRY, base_exchange_id: 'bad id!' }), null)
+})
+
+test('remove drops a carried widget; replaces swaps one in place', () => {
+  const rm = { type: 'workspace', v: 1, op: 'widget.remove', seq: 2, id: 's1' }
+  const rep = { type: 'workspace', v: 1, op: 'widget.add', seq: 3, id: 'w4', replaces: 'w1', kind: 'chart', title: 'New', sql_id: 's1q2', chart: { type: 'bar', x: 'm', y: ['v'] } }
+  const st = reduceWorkspace([CARRY, { ...CARRY, seq: 2, op: 'widget.add', id: 'w2', kind: 'kpi', title: 'K', sql_id: 's1q1', kpi: { label: 'L', value: 'v' } }, { ...rm, seq: 3 }, { ...rep, seq: 4 }])
+  assert.deepEqual(st.widgets.map((w) => w.id), ['w4', 'w2'])
+  assert.equal(st.widgets[0].replaces, undefined)
+  assert.equal(st.widgets[0].origin, undefined)
+})
+
+test('sanitize keeps the base id and the widget origins (pattern-checked)', () => {
+  const doc = reduceWorkspace([CARRY])
+  doc.status = 'done'
+  const clean = sanitizeWorkspace(JSON.parse(JSON.stringify(doc)))
+  assert.equal(clean.base_exchange_id, 'ex-a')
+  assert.deepEqual(clean.widgets.map((w) => w.origin), ['ex-a', 'ex-a'])
+  const forged = JSON.parse(JSON.stringify(doc))
+  forged.base_exchange_id = '../x'
+  forged.widgets[0].origin = 'a b'
+  const out = sanitizeWorkspace(forged)
+  assert.equal(out.base_exchange_id, undefined)
+  assert.equal(out.widgets[0].origin, undefined)
+  // An old document (no continuity fields) is unchanged.
+  assert.equal(sanitizeWorkspace({ v: 1, status: 'done', widgets: [] }).base_exchange_id, undefined)
+})
+
+test('resultRef keys a result by (owning exchange, sql_id), never by sql_id alone', () => {
+  const carried = { id: 'w1', sql_id: 's1q1', origin: 'ex-a' }
+  const own = { id: 'w3', sql_id: 's1q1' }
+  const a = resultRef(carried, 'ex-b')
+  const b = resultRef(own, 'ex-b')
+  assert.deepEqual(a, { origin: 'ex-a', exchangeId: 'ex-a', sqlId: 's1q1', key: 'ex-a|s1q1' })
+  assert.deepEqual(b, { origin: null, exchangeId: 'ex-b', sqlId: 's1q1', key: 'ex-b|s1q1' })
+  assert.notEqual(a.key, b.key)
+  assert.equal(sameResult(a, b), false)
+  assert.equal(sameResult(b, resultRef({ sql_id: 's1q1' }, 'ex-b')), true)
+  assert.equal(resultRef({ id: 't' }, 'ex-b'), null)
+  // A live run without its exchange id yet still has a usable (own) ref.
+  assert.equal(resultRef(own, null).exchangeId, null)
+})
+
+test('dataFocus resolves a carried result on its origin (no step, no local provenance)', () => {
+  const st = reduceWorkspace([
+    CARRY,
+    { type: 'workspace', v: 1, op: 'plan.set', seq: 2, mission: 'M', origin: 'model', steps: [{ id: 'p1', label: 'One' }] },
+    { type: 'workspace', v: 1, op: 'widget.add', seq: 3, id: 'w3', step_id: 'p1', kind: 'table', title: 'T', sql_id: 's1q1' },
+    { type: 'workspace', v: 1, op: 'prov.set', seq: 4, sql_id: 's1q1', agent_key: 'revenue', tool: 'semantic-model-query', success: true, step_id: 'p1' },
+  ])
+  const carried = dataFocus(st, 's1q1', 'w1', 'ex-a')
+  assert.equal(carried.widget.id, 'w1')
+  assert.equal(carried.step, null)
+  assert.equal(carried.provenance, null)
+  const own = dataFocus(st, 's1q1', 'w1')
+  assert.equal(own.widget.id, 'w3') // never the carried widget of the same sql_id
+  assert.equal(own.step.id, 'p1')
+  assert.ok(own.provenance)
+  assert.equal(dataFocus(st, 's1q1', null, 'ex-zz'), null)
+  assert.equal(provenanceFor(st, st.widgets[0]), null)
+  // The plan counts only this run's widgets.
+  assert.equal(stepsWithProgress(st)[0].widgets, 1)
+})
+
+test('the shown sealed Studio rides in screen_context as studio_exchange_id', () => {
+  assert.equal(studioContextId({ open: true, exchangeId: 'ex-a', running: false }), 'ex-a')
+  assert.equal(studioContextId({ open: true, exchangeId: 42, running: false }), '42')
+  assert.equal(studioContextId({ open: false, exchangeId: 'ex-a' }), null)
+  assert.equal(studioContextId({ open: true, exchangeId: 'ex-a', running: true }), null)
+  assert.equal(studioContextId({ open: true, exchangeId: null }), null)
+  assert.equal(studioContextId({ open: true, exchangeId: 'a b' }), null)
+  assert.deepEqual(withStudioContext(undefined, 'ex-a'), { open: false, studio_exchange_id: 'ex-a' })
+  const ev = { open: true, exchange_id: 'ex-a', active_tab: 'sources' }
+  assert.deepEqual(withStudioContext(ev, 'ex-a'), { ...ev, studio_exchange_id: 'ex-a' })
+  assert.equal(withStudioContext(ev, null), ev)
+  assert.equal(withStudioContext(undefined, null), undefined)
 })

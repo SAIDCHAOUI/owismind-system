@@ -1,4 +1,4 @@
-// pickDefaultAgent: pure default-agent selection — prefer the last-used key when it is
+// pickDefaultAgent: pure default-agent selection - prefer the last-used key when it is
 // still enabled, otherwise fall back to the first enabled agent (empty when none).
 import { test } from 'node:test'
 import assert from 'node:assert/strict'

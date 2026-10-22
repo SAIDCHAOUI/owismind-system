@@ -260,6 +260,164 @@ class LiveResultRelayTests(_WorkerBase):
         self.assertEqual(len(self.sql_saved[0]), 10)
 
 
+def _ws_chunk(data):
+    return {"type": "event", "eventKind": "WORKSPACE", "eventData": data}
+
+
+_BASE_DOC = {
+    "v": 1, "status": "done", "exchange_id": "ex-base", "last_seq": 4, "plan": None,
+    "notes": [], "provenance": {},
+    "widgets": [
+        {"id": "w1", "kind": "chart", "title": "CA 2025 vs 2026", "sql_id": "s1q1",
+         "size": "wide", "binding": "explicit",
+         "chart": {"type": "line", "x": "month", "y": ["ca_2025", "ca_2026"]}},
+        {"id": "w2", "kind": "text", "title": "Lecture", "text": "Hausse."},
+    ],
+    "summary": {"widget_ids_by_step": {}, "sql_ids": ["s1q1"]},
+}
+
+_CONTINUE_RUN = [
+    _ws_chunk({"v": 1, "op": "studio.continue", "seq": 1, "ts": 0.5}),
+    _ws_chunk({"v": 1, "op": "widget.add", "seq": 2, "id": "w3", "kind": "text",
+               "title": "2025 seul", "text": "x"}),
+]
+
+
+class StudioContinuityWorkerTests(_WorkerBase):
+    """Base validation (owner, session, running, self, forged), ancestor fallback,
+    [CURRENT STUDIO] injection, studio.continue -> studio.carry (same seq) and the
+    persisted continued Studio (carried widgets keep their origin + binding)."""
+
+    def setUp(self):
+        super().setUp()
+        from owismind.agents import context as real_context
+        self.sent, self.meta_calls, self.lookup_calls, self.chain_calls = [], [], [], []
+        self.meta = {"ex-base": (json.loads(json.dumps(_BASE_DOC)), "sess-1")}
+        self.with_ws = set()
+        self.chain_ids = []
+        test = self
+
+        def _chain(uid, pid, limit, with_ids=False):
+            test.chain_calls.append(with_ids)
+            return ([], [], list(test.chain_ids)) if with_ids else ([], [])
+
+        stream_manager.chat_v5.chain_context_for_agent = _chain
+        stream_manager.context = types.SimpleNamespace(
+            build_completion_messages=lambda history, message, suffix: (
+                test.sent.append(suffix) or [{"role": "user", "content": message + suffix}]),
+            build_studio_block=real_context.build_studio_block,
+            build_prior_data_block=lambda results: "")
+
+        class _Storage(object):
+            @staticmethod
+            def save_workspace(ex, uid, sid, state):
+                test.saved.append((ex, uid, sid, state))
+
+            @staticmethod
+            def read_workspace_meta(uid, ex):
+                test.meta_calls.append((uid, ex))
+                return test.meta.get(ex, (None, None))
+
+            @staticmethod
+            def workspace_exchange_ids(uid, ids):
+                test.lookup_calls.append((uid, list(ids)))
+                return set(test.with_ws)
+
+        stream_manager.workspaces_storage = _Storage
+
+    def _go(self, run_id, screen_context=None, enabled=True, exchange_id="ex-new"):
+        _seed_run(run_id)
+        self._run_ids.append(run_id)
+        streaming.dataiku = _fake_dataiku(_CONTINUE_RUN)
+        stream_manager._worker(run_id, "P", "A", "Rajoute 2025", exchange_id, 0.0,
+                               "u-test", "parent-1", 20, "", screen_context, False,
+                               300.0, None, None, enabled)
+        with stream_manager._LOCK:
+            live = list(stream_manager._RUNS[run_id]["events"])
+        return [e for e in live if e["type"] == "workspace"]
+
+    def test_valid_base_is_described_and_carried(self):
+        relayed = self._go("r-cont", {"open": False, "studio_exchange_id": "ex-base"})
+        self.assertEqual(self.meta_calls, [("u-test", "ex-base")])
+        self.assertIn("[CURRENT STUDIO", self.sent[0])
+        self.assertIn('⟦owi:studio={"ids":["w1","w2"],"n":2}⟧', self.sent[0])
+        self.assertNotIn("ex-base", self.sent[0])        # the id never reaches the agent
+        self.assertEqual([(e["op"], e["seq"]) for e in relayed],
+                         [("studio.carry", 1), ("widget.add", 2)])
+        carry = relayed[0]
+        self.assertEqual(carry["base_exchange_id"], "ex-base")
+        self.assertEqual([(w["id"], w["origin"]) for w in carry["widgets"]],
+                         [("w1", "ex-base"), ("w2", "ex-base")])
+        state = self.saved[0][3]
+        self.assertEqual([w["id"] for w in state["widgets"]], ["w1", "w2", "w3"])
+        self.assertEqual(state["base_exchange_id"], "ex-base")
+        # finalize ran with NO captured SQL: the carried chart keeps its binding.
+        self.assertEqual(state["widgets"][0]["binding"], "explicit")
+        self.assertEqual(state["summary"]["sql_ids"], [])
+
+    def _assert_no_base(self, relayed):
+        self.assertEqual(self.sent[0], "")
+        self.assertEqual([e["op"] for e in relayed], ["studio.continue", "widget.add"])
+        self.assertEqual([w["id"] for w in self.saved[0][3]["widgets"]], ["w3"])
+        self.assertNotIn("base_exchange_id", self.saved[0][3])
+
+    def test_other_session_rejected(self):
+        self.meta["ex-base"] = (self.meta["ex-base"][0], "sess-other")
+        self._assert_no_base(self._go("r-sess", {"studio_exchange_id": "ex-base"}))
+
+    def test_other_user_or_forged_id_reveals_nothing(self):
+        # Owner-scoped read: someone else's (or an unknown) exchange reads as absent.
+        self._assert_no_base(self._go("r-forged", {"studio_exchange_id": "ex-foreign"}))
+        self.assertEqual(self.meta_calls, [("u-test", "ex-foreign")])
+
+    def test_running_base_rejected(self):
+        doc = dict(self.meta["ex-base"][0], status="running")
+        self.meta["ex-base"] = (doc, "sess-1")
+        self._assert_no_base(self._go("r-running", {"studio_exchange_id": "ex-base"}))
+
+    def test_own_exchange_never_a_base(self):
+        self._assert_no_base(self._go("r-self", {"studio_exchange_id": "ex-new"}))
+        self.assertEqual(self.meta_calls, [])
+
+    def test_fallback_to_newest_ancestor_with_workspace(self):
+        self.chain_ids = ["ex-3", "ex-base", "ex-1"]          # newest first
+        self.with_ws = {"ex-base", "ex-1"}
+        relayed = self._go("r-anc", None)
+        self.assertEqual(self.lookup_calls, [("u-test", ["ex-3", "ex-base", "ex-1"])])
+        self.assertEqual(self.meta_calls, [("u-test", "ex-base")])
+        self.assertEqual(relayed[0]["op"], "studio.carry")
+
+    def test_disabled_gate_reads_nothing(self):
+        relayed = self._go("r-off", {"studio_exchange_id": "ex-base"}, enabled=False)
+        self.assertEqual(self.chain_calls, [False])
+        self.assertEqual((self.meta_calls, self.lookup_calls), ([], []))
+        self._assert_no_base(relayed)
+
+    def test_carry_applied_once(self):
+        chunks = _CONTINUE_RUN + [
+            _ws_chunk({"v": 1, "op": "studio.continue", "seq": 3, "remove": ["w1"]})]
+        _seed_run("r-twice")
+        self._run_ids.append("r-twice")
+        streaming.dataiku = _fake_dataiku(chunks)
+        stream_manager._worker("r-twice", "P", "A", "m", "ex-new", 0.0, "u-test",
+                               "parent-1", 20, "", {"studio_exchange_id": "ex-base"},
+                               False, 300.0, None, None, True)
+        state = self.saved[0][3]
+        self.assertEqual([w["id"] for w in state["widgets"]], ["w1", "w2", "w3"])
+        self.assertEqual(state["last_seq"], 3)
+
+    def test_remove_on_continue(self):
+        chunks = [_ws_chunk({"v": 1, "op": "studio.continue", "seq": 1,
+                             "remove": ["w2", "w9"]})]
+        _seed_run("r-rm")
+        self._run_ids.append("r-rm")
+        streaming.dataiku = _fake_dataiku(chunks)
+        stream_manager._worker("r-rm", "P", "A", "m", "ex-new", 0.0, "u-test",
+                               "parent-1", 20, "", {"studio_exchange_id": "ex-base"},
+                               False, 300.0, None, None, True)
+        self.assertEqual([w["id"] for w in self.saved[0][3]["widgets"]], ["w1"])
+
+
 class SpanSqlIdTests(unittest.TestCase):
     def test_orchestrator_span_sql_id_captured(self):
         trace = {"children": [

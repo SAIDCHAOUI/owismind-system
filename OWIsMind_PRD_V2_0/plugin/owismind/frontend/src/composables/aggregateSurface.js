@@ -18,7 +18,8 @@
 //   fetchAggregate(group, measures, limit): Promise - the host builds the payload and
 //                  calls its backend; resolves { rows, totals?, truncated? }
 //   refreshRows(): void|Promise      - re-fetch the host's Data-table window (used when
-//                  leaving Analyze after a scope change had skipped it)
+//                  leaving Analyze, or mounting its workspace, after a scope change had
+//                  skipped it)
 //   errorCode:     string            - the host's default error code (e.g. 'source_unavailable')
 import { ref } from 'vue'
 import {
@@ -93,8 +94,9 @@ export function createAggregateSurface(deps) {
   // Signature of the aggregation SCOPE at the last FRESH load (host-computed): a change
   // re-fires the count, re-computes Calculate, and re-runs Analyze if open + complete.
   let lastViewSig = null
-  // True when filters/search changed while the Analyze view was open (the table window
-  // is skipped there); the Data view re-fetches its rows lazily on return.
+  // True when filters/search changed while NO surface displayed the rows window (the
+  // Analyze view open without its workspace mounted): the next surface that shows the
+  // rows (the Data view, or the workspace's own data pane) re-fetches them lazily.
   let rowsStale = false
 
   // Type of one column of the active scope ('' when unknown).
@@ -471,6 +473,21 @@ export function createAggregateSurface(deps) {
   //   - a scope change while Analyze is open skipped the Data window     -> markRowsStale
   function markRowsStale() { rowsStale = true }
   function clearRowsStale() { rowsStale = false }
+  // Whether the host's rows window is ON SCREEN right now: the Data view, or the Analyze
+  // workspace, whose data pane browses the SAME window as the Data table (user ask
+  // 2026-10-20: the Analyze tab behaves exactly like the Data tab). Only Analyze open
+  // with no workspace mounted leaves the rows unseen, so only then may a scope change
+  // skip the rows query (the host marks the window stale instead).
+  function rowsShown() {
+    return !analyzeOpen.value || workspaceActive.value
+  }
+  // A surface that displays the rows window just mounted: catch up a window a scope
+  // change had skipped. No-op (no request) when the window is current.
+  function ensureFreshRows() {
+    if (!rowsStale) return
+    rowsStale = false
+    deps.refreshRows()
+  }
 
   return {
     // DB-computed row count + the Calculate zone
@@ -484,9 +501,9 @@ export function createAggregateSurface(deps) {
     workspaceActive, workspaceMeasures, workspaceGroup, workspaceBucket,
     workspaceRows, workspaceTotals, workspaceTruncated, workspaceLoading, workspaceError,
     setWorkspaceActive, addWorkspaceMeasure, removeWorkspaceMeasure, replaceWorkspaceMeasure,
-    setWorkspaceGroup, setWorkspaceBucket, runWorkspace,
+    setWorkspaceGroup, setWorkspaceBucket, runWorkspace, ensureFreshRows,
     // host orchestration hooks
     refreshTotals, afterScopeChange, resetDerived, invalidate,
-    markRowsStale, clearRowsStale,
+    markRowsStale, clearRowsStale, rowsShown,
   }
 }

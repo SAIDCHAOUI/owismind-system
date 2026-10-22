@@ -345,15 +345,17 @@ def history_messages_for_chain(user_id, parent_exchange_id, max_messages):
     return chain_context_for_agent(user_id, parent_exchange_id, max_messages)[0]
 
 
-def chain_context_for_agent(user_id, parent_exchange_id, max_messages):
+def chain_context_for_agent(user_id, parent_exchange_id, max_messages, with_ids=False):
     """``(history_messages, prior_results)`` from ONE ancestor-chain read.
 
     Same bounded walk as ``history_messages_for_chain`` (which delegates here);
     the chain rows already carry each exchange's ``generated_sql`` items, so the
     recallable prior results are extracted from the SAME read - no extra SQL.
+    ``with_ids=True`` adds a third element: the chain's exchange ids, NEWEST first
+    (Studio continuity: the newest ancestor with a workspace), from the same read.
     """
     if not parent_exchange_id:
-        return [], []
+        return ([], [], []) if with_ids else ([], [])
     limit = validate_history_limit(max_messages)
     n_exchanges = exchanges_to_fetch(limit)
     table = full_table(CHAT_V5_LOGICAL)
@@ -370,8 +372,12 @@ def chain_context_for_agent(user_id, parent_exchange_id, max_messages):
     rows.reverse()                        # -> chronological (oldest-first)
     for r in rows:
         r["generated_sql"] = parse_json_list(r.get("generated_sql"))
-    return (flatten_exchanges_to_messages(rows, limit),
-            extract_prior_results(rows))
+    history = flatten_exchanges_to_messages(rows, limit)
+    prior = extract_prior_results(rows)
+    if not with_ids:
+        return history, prior
+    ids = [str(r["exchange_id"]) for r in reversed(rows) if r.get("exchange_id")]
+    return history, prior, ids
 
 
 # Server-side truncation length for a conversation title (first user message).

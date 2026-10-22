@@ -19,6 +19,13 @@ const evidence = useEvidenceStore()
 const entry = computed(() => ws.entryFor(props.exchange.id, props.exchange.uid))
 const running = computed(() => !!(entry.value && entry.value.running))
 const shown = computed(() => ws.open && !!entry.value && ws.shown === entry.value)
+// This answer continued the Studio of an earlier one (studio.carry): its button says
+// so. The earlier answer's button is unchanged and opens its own snapshot.
+const continued = computed(() => !!(entry.value && entry.value.state && entry.value.state.base_exchange_id))
+const label = computed(() => {
+  if (shown.value) return t('ws.summary.shown')
+  return continued.value ? t('ws.summary.continued') : t('ws.summary.open')
+})
 
 async function openStudio() {
   const id = props.exchange.id
@@ -38,7 +45,7 @@ async function openStudio() {
       @click="openStudio"
     >
       <Icon :name="shown ? 'check' : 'layers'" />
-      {{ shown ? t('ws.summary.shown') : t('ws.summary.open') }}
+      {{ label }}
     </button>
     <span v-if="running" class="studio-live"><span class="dot" aria-hidden="true" />{{ t('ws.status.running') }}</span>
   </div>

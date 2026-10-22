@@ -19,7 +19,7 @@ function metaWith(level, captured, extra) {
 }
 
 // ---------------------------------------------------------------------------
-// trustLevel — full (level × result_captured) matrix + degraded/v1 fallbacks
+// trustLevel - full (level × result_captured) matrix + degraded/v1 fallbacks
 // ---------------------------------------------------------------------------
 
 test('trustLevel: calc_decomposed + captured is the strongest badge', () => {
@@ -82,7 +82,7 @@ test('trustLevel: v1 meta without a verification block falls back to declared', 
 })
 
 test('trustLevel: degraded meta is declared even with a strong stray level', () => {
-  // available === false is the degraded marker — never upgrade a degraded panel.
+  // available === false is the degraded marker - never upgrade a degraded panel.
   const meta = { available: false, verification: { level: 'calc_decomposed', result_captured: true } }
   assert.deepEqual(trustLevel(meta), { key: 'ev.proof.level.declared', tone: 'muted' })
 })
@@ -106,7 +106,7 @@ test('trustLevel: tone is always one of the three frozen tones', () => {
 })
 
 // ---------------------------------------------------------------------------
-// calcStepArgs — known kinds, opaque fallback, param truncation
+// calcStepArgs - known kinds, opaque fallback, param truncation
 // ---------------------------------------------------------------------------
 
 test('calcStepArgs: known kind maps to its ev.exp.* key with verbatim params', () => {
@@ -151,7 +151,7 @@ test('calcStepArgs: non-string params are stringified, null becomes empty', () =
 })
 
 // ---------------------------------------------------------------------------
-// droppedNote — count of non-reproduced conditions
+// droppedNote - count of non-reproduced conditions
 // ---------------------------------------------------------------------------
 
 test('droppedNote: absent verification means nothing was dropped', () => {

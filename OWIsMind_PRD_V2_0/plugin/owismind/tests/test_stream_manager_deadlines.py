@@ -188,13 +188,15 @@ class StartRunModeTests(unittest.TestCase):
         def _fake_worker(run_id, project_key, agent_id, message, exchange_id,
                          started_at, user_id, parent_exchange_id, history_limit,
                          user_suffix, screen_context=None, prior_recall_enabled=False,
-                         deadline_s=None, mode=None, engine=None):
+                         deadline_s=None, mode=None, engine=None,
+                         studio_context_enabled=False):
             # Mirrors the real signature so the test pins HOW start_run passes the
             # deadline, not just that some float exists somewhere in the args.
             self.captured["run_id"] = run_id
             self.captured["deadline_s"] = deadline_s
             self.captured["mode"] = mode
             self.captured["engine"] = engine
+            self.captured["studio_context_enabled"] = studio_context_enabled
             self.ran.set()
 
         stream_manager._worker = _fake_worker

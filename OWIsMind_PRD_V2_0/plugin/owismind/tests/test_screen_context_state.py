@@ -425,6 +425,19 @@ class BuildScreenStateSourceTests(unittest.TestCase):
 
 # --- routes._sanitize_screen_context ------------------------------------------
 class SanitizeScreenContextTests(unittest.TestCase):
+    def test_studio_pointer_alone_is_a_valid_context(self):
+        out = routes._sanitize_screen_context({"studio_exchange_id": "ex_A-1"})
+        self.assertEqual(out, {"open": False, "studio_exchange_id": "ex_A-1"})
+        both = routes._sanitize_screen_context(
+            {"open": True, "exchange_id": "e1", "studio_exchange_id": "e2"})
+        self.assertEqual(both["studio_exchange_id"], "e2")
+        self.assertEqual(both["exchange_id"], "e1")
+
+    def test_studio_pointer_pattern_checked(self):
+        for bad in ("a b", "x" * 129, 42, True, None, "'; DROP", "e\n"):
+            self.assertIsNone(routes._sanitize_screen_context({"studio_exchange_id": bad}),
+                              bad)
+
     def test_open_only_unchanged_shape(self):
         out = routes._sanitize_screen_context(
             {"open": True, "exchange_id": 42, "active_tab": "chart"})
