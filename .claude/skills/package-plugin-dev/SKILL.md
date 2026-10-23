@@ -5,6 +5,8 @@ description: Build and package the coexisting DEV copy of the OWIsMind DSS plugi
 
 # /package-plugin-dev - Build the coexisting DEV plugin (id `owismind_dev`)
 
+> **V2 (branche `OWIsMind_PRD_V2_0`) : la webapp DSS tourne sur le plugin `owismind_v2_0`.** Pour la mettre a jour, construire avec `python3 OWIsMind_PRD_V2_0/plugin/tools/build_dev_plugin.py --version 2.0` (zip `owismind_v2_0-upload.zip`). Le mode par defaut (`owismind_dev`) installe un AUTRE plugin (L199). En cas de doute, lire l'id du zip deja deploye avant de builder.
+
 There is ONE source of truth: `OWIsMind_PRD_V2_0/plugin/owismind/`. The PROD build/package (`/build-plugin`
 + `/package-plugin`) is unchanged. This skill emits a SECOND, independent plugin
 (id `owismind_dev`) that installs ALONGSIDE the prod one on the same DSS instance, for testing.

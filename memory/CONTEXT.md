@@ -1,6 +1,6 @@
 # CONTEXT - OWIsMind (memoire courte, chargee a CHAQUE session)
 
-> Focus + pointeurs seulement. Etat durable : `PROJECT_STATE.md` ; lecons (L001-L198, historique v1.x
+> Focus + pointeurs seulement. Etat durable : `PROJECT_STATE.md` ; lecons (L001-L199, historique v1.x
 > inclus, encore valables pour DSS/agents) : `LESSONS.md` ; logs par jour : `sessions/*.md`.
 > Gotchas actives (frontend/backend/agents/memoire) : `.claude/rules/*.md`, chargees AUTO.
 
@@ -23,7 +23,7 @@ Spec : `OWIsMind_PRD_V2_0/docs/V2_ARCHITECTURE.md`.
 - 2026-10-22 : bilan + commit du chantier 17-22 oct. (`sessions/2026-10-22.md`, L197-L198).
 
 ## Prochaines etapes
-- Validation VISUELLE V2 par l'user (clair ET sombre) sur le simulateur puis en DSS (`sessions/2026-10-22.md`).
+- Mise a jour DSS de la V2 (plugin `owismind_v2_0`) : suivre `OWIsMind_PRD_V2_0/docs/DEPLOY_V2_0.md` puis valider clair ET sombre (L199).
 - Mettre a jour `CHARTE_V2_UI.md` section 3 (en-tete Studio) (`sessions/2026-10-22.md`).
 - Trancher l'Agent Factory (garder / retirer).
 - Phase 3 (spec section E) : retrait du legacy V1.3 dans le code + validation DSS.
